@@ -64,22 +64,20 @@ lint:
 ## Run imports tests
 tests-imports:
 	@uv sync
-	@uv pip install pytest pytest-asyncio pytest-cov greenlet
-	@uv run pytest --cov --cov-append -m 'imports' tests/unit/test_imports.py
+	@uv pip install pytest pytest-asyncio pytest-cov pytest-xdist greenlet
+	@uv run pytest -p no:xdist --cov --cov-append -m 'imports' tests/unit/test_imports.py
 
 ## Run integration tests
 tests-integration:
-	@docker compose up -d
-	@echo "Waiting 15 seconds for services to start..."
-	@sleep 15s
+	@docker compose up -d --wait
 	@uv sync --group=dev --all-extras
-	@uv run pytest --cov --cov-append -m 'integration'
+	@uv run pytest -n auto --cov --cov-append -m 'integration'
 	@echo "Stopping services..."
 	@docker compose down --remove-orphans --volumes
 
 ## Run unit tests
 tests-unit:
-	@uv run pytest --cov --cov-append -m 'unit'
+	@uv run pytest -n auto --cov --cov-append -m 'unit'
 
 ## Run all tests
 tests-all:
@@ -93,3 +91,7 @@ tests-all:
 ## Serve documentation locally
 serve-docs:
 	@uv run mkdocs serve
+
+## Run SonarQube analysis (requires sonar-scanner)
+sonar:
+	@./scripts/sonar.sh

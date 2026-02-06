@@ -1,0 +1,30 @@
+name: Setup test environment
+description: Install uv, make (Windows), Python for test jobs
+
+inputs:
+  python-version:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b
+      with:
+        enable-cache: true
+        cache-dependency-glob: "pyproject.toml"
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Add .local/bin to Windows PATH
+      if: runner.os == 'Windows'
+      shell: bash
+      run: echo "$USERPROFILE/.local/bin" >> $GITHUB_PATH
+
+    - name: Install make (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install make -y
+        echo "C:\ProgramData\chocolatey\bin" >> $env:GITHUB_PATH
+
+    - name: Set up Python
+      run: uv python install ${{ inputs.python-version }}

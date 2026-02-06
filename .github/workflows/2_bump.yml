@@ -2,28 +2,60 @@ name: Bump version
 
 on:
   workflow_dispatch:
+    inputs:
+      increment:
+        description: "Version increment type"
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - "PATCH"
+          - "MINOR"
+          - "MAJOR"
+      release_notes:
+        description: "Custom release notes (overrides CHANGELOG.md)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
   bump-version:
-    if: "!startsWith(github.event.head_commit.message, 'bump:')"
+    if: "github.event.head_commit == null || !startsWith(github.event.head_commit.message, 'bump:')"
     runs-on: ubuntu-latest
     name: "Bump version and create changelog with commitizen"
     steps:
       - name: Check out
-        uses: actions/checkout@v5.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           token: "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
           fetch-depth: 0
 
       - name: Create bump and changelog
-        uses: commitizen-tools/commitizen-action@0.24.0
+        id: bump
+        uses: commitizen-tools/commitizen-action@2e8226b3e7e141ae28de9942957f267eb5d68fb6
         with:
           github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          increment: ${{ inputs.increment }}
+
+      - name: Prepare release notes
+        id: release_notes
+        run: |
+          if [ -n "$RELEASE_NOTES" ]; then
+            printf '%s' "$RELEASE_NOTES" > release_body.md
+            echo "path=release_body.md" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=CHANGELOG.md" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          RELEASE_NOTES: ${{ inputs.release_notes }}
 
       - name: Release
-        uses: softprops/action-gh-release@v2.3.3
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
         with:
-          body_path: "CHANGELOG.md"
-          tag_name: ${{ env.REVISION }}
+          tag_name: ${{ steps.bump.outputs.version }}
+          body_path: ${{ steps.release_notes.outputs.path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

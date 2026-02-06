@@ -29,18 +29,18 @@ def fixture_kafka_config(env_config: dict[str, Any]) -> KafkaConfig:
 
 @pytest.mark.asyncio
 async def test_kafka_check_success(kafka_config: KafkaConfig) -> None:
-    check = KafkaHealthCheck(**kafka_config)  # ty: ignore[missing-argument]
+    check = KafkaHealthCheck(**kafka_config)
     result = await check()
     assert result == HealthCheckResult(name="Kafka", healthy=True, error_details=None)
 
 
 @pytest.mark.asyncio
 async def test_kafka_check_failure(kafka_config: KafkaConfig) -> None:
-    config = {
+    config: KafkaConfig = {
         **kafka_config,
         "bootstrap_servers": "localhost2:9093",
     }
-    check = KafkaHealthCheck(**config)  # ty: ignore[missing-argument]
+    check = KafkaHealthCheck(**config)
     result = await check()
     assert result.healthy is False
     assert result.error_details is not None
@@ -49,11 +49,11 @@ async def test_kafka_check_failure(kafka_config: KafkaConfig) -> None:
 
 @pytest.mark.asyncio
 async def test_kafka_check_connection_error(kafka_config: KafkaConfig) -> None:
-    config = {
+    config: KafkaConfig = {
         **kafka_config,
         "bootstrap_servers": "localhost:9092",
     }
-    check = KafkaHealthCheck(**config)  # ty: ignore[missing-argument]
+    check = KafkaHealthCheck(**config)
     result = await check()
     assert result.healthy is False
     assert result.error_details is not None

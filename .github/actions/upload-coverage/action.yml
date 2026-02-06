@@ -1,0 +1,24 @@
+name: Upload coverage to Codecov
+description: Generate coverage XML and upload to Codecov
+
+inputs:
+  flags:
+    required: true
+  name:
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Generate coverage XML for Codecov
+      run: uv run coverage xml
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de
+      with:
+        env_vars: OS,PYTHON
+        fail_ci_if_error: true
+        flags: ${{ inputs.flags }}
+        name: ${{ inputs.name }}
+        verbose: true

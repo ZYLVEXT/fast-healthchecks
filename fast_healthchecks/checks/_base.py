@@ -1,18 +1,11 @@
 """This module contains the base classes for all health checks."""
 
-from typing import Generic, Protocol, TypeAlias, TypeVar
+from __future__ import annotations
 
-from fast_healthchecks.compat import PYDANTIC_INSTALLED, PYDANTIC_V2, AmqpDsn, KafkaDsn, MongoDsn, PostgresDsn, RedisDsn
+from typing import Generic, Protocol, TypeVar
+from urllib.parse import urlsplit
+
 from fast_healthchecks.models import HealthCheckResult
-
-AnyDsn: TypeAlias = AmqpDsn | KafkaDsn | MongoDsn | PostgresDsn | RedisDsn
-
-if PYDANTIC_INSTALLED:
-    if PYDANTIC_V2:
-        from pydantic import TypeAdapter
-    else:  # pragma: no cover
-        from pydantic import parse_obj_as  # ty: ignore[deprecated]
-
 
 T_co = TypeVar("T_co", bound=HealthCheckResult, covariant=True)
 
@@ -38,27 +31,48 @@ class HealthCheckDSN(HealthCheck[T_co], Generic[T_co]):
     @classmethod
     def from_dsn(
         cls,
-        dsn: AnyDsn,
+        dsn: str,
         *,
         name: str = "Service",
         timeout: float = DEFAULT_HC_TIMEOUT,
-    ) -> "HealthCheckDSN[T_co]":
+    ) -> HealthCheckDSN[T_co]:
         raise NotImplementedError
 
     @classmethod
-    def check_pydantic_installed(cls) -> None:
-        """Check if Pydantic is installed."""
-        if not PYDANTIC_INSTALLED:
-            msg = "Pydantic is not installed"
-            raise RuntimeError(msg) from None
+    def validate_dsn(cls, dsn: str, *, allowed_schemes: tuple[str, ...]) -> str:
+        """Validate the DSN has an allowed scheme.
 
-    @classmethod
-    def validate_dsn(cls, dsn: AnyDsn | str, type_: type[AnyDsn]) -> str:
-        """Validate the DSN."""
-        if not PYDANTIC_INSTALLED:
-            _ = type_(dsn)
-            return str(dsn)
+        Allows compound schemes (e.g. postgresql+asyncpg) when the base
+        part before '+' is in allowed_schemes. Scheme comparison is case-insensitive.
 
-        if PYDANTIC_V2:
-            return str(TypeAdapter(type_).validate_python(dsn))
-        return str(parse_obj_as(type_, dsn))  # pragma: no cover  # ty: ignore[deprecated]
+        Returns:
+            str: The DSN string (stripped of leading/trailing whitespace).
+
+        Raises:
+            TypeError: If dsn is not a string.
+            ValueError: If DSN is empty or scheme is not in allowed_schemes.
+        """
+        if not isinstance(dsn, str):
+            msg = f"DSN must be str, got {type(dsn).__name__!r}"
+            raise TypeError(msg) from None
+
+        dsn = dsn.strip()
+        if not dsn:
+            msg = "DSN cannot be empty"
+            raise ValueError(msg) from None
+
+        if not allowed_schemes:
+            msg = "allowed_schemes cannot be empty"
+            raise ValueError(msg) from None
+
+        parsed = urlsplit(dsn)
+        scheme = (parsed.scheme or "").lower()
+        base_scheme = scheme.split("+", 1)[0] if "+" in scheme else scheme
+
+        allowed_set = frozenset(s.lower() for s in allowed_schemes)
+        if scheme not in allowed_set and base_scheme not in allowed_set:
+            schemes_str = ", ".join(sorted(allowed_set))
+            msg = f"DSN scheme must be one of {schemes_str} (or compound e.g. postgresql+driver), got {scheme!r}"
+            raise ValueError(msg) from None
+
+        return dsn

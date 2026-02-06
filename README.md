@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/shepilov-vladislav/fast-healthchecks/refs/heads/main/docs/img/green.svg" width="30"> <strong>FastHealthcheck</strong>
 </h1>
 
-<b>Framework agnostic health checks with integrations for most popular ASGI frameworks: [FastAPI](https://github.com/fastapi/fastapi) / [Faststream](https://github.com/airtai/faststream) / [Litestar](https://github.com/litestar-org/litestar) to help you to implement the [Health Check API](https://microservices.io/patterns/observability/health-check-api.html) pattern</b>
+<b>Framework-agnostic health checks with integrations for the most popular ASGI frameworks: [FastAPI](https://github.com/fastapi/fastapi) / [Faststream](https://github.com/airtai/faststream) / [Litestar](https://github.com/litestar-org/litestar) to help you implement the [Health Check API](https://microservices.io/patterns/observability/health-check-api.html) pattern</b>
 
 ---
 
@@ -13,7 +13,7 @@
   </a>
 
   <a href="https://codecov.io/gh/shepilov-vladislav/fast-healthchecks" target="_blank">
-    <img src="https://codecov.io/gh/shepilov-vladislav/fast-healthchecks/branch/main/graph/badge.svg?token=ddDOL8qZLp" alt="Coverage"/>
+    <img src="https://codecov.io/gh/shepilov-vladislav/fast-healthchecks/branch/main/graph/badge.svg" alt="Coverage"/>
   </a>
 
   <a href="https://www.pepy.tech/projects/fast-healthchecks" target="_blank">
@@ -52,6 +52,8 @@ With `uv`:
 ```bash
 uv add fast-healthchecks
 ```
+
+Backends (Redis, Kafka, Mongo, PostgreSQL, etc.) and framework integrations are optional. Install the extras you need, e.g. `pip install fast-healthchecks[redis]` or `pip install fast-healthchecks[redis,mongo,fastapi]`. See [pyproject.toml](https://github.com/shepilov-vladislav/fast-healthchecks/blob/main/pyproject.toml) for all extra names (asyncpg, psycopg, redis, aio-pika, httpx, aiokafka, motor, fastapi, faststream, litestar, opensearch).
 
 ## Quick Start
 
@@ -124,6 +126,31 @@ app.include_router(
 )
 ```
 
+### Resource cleanup on shutdown
+
+Checks that cache a client (Redis, Kafka, Mongo, URL, OpenSearch) should be closed on app shutdown. Use `healthcheck_shutdown(probes)` or call `await router.close()` (FastAPI) in your lifespan handler:
+
+```python
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fast_healthchecks.integrations.base import Probe, healthcheck_shutdown
+from fast_healthchecks.integrations.fastapi import HealthcheckRouter
+
+probes = (Probe(name="readiness", checks=[...]),)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await healthcheck_shutdown(probes)()
+
+app = FastAPI(lifespan=lifespan)
+app.include_router(HealthcheckRouter(*probes, prefix="/health"))
+```
+
+### API note
+
+The `to_dict()` methods on check classes are for internal test use only. Do not rely on them in application code; they are not part of the supported public API.
+
 ## Development
 
 ### Setup environment
@@ -140,11 +167,16 @@ uv sync --group=dev --group=docs --all-extras
 make lint
 ```
 
-### Run all tests
+### Running tests
 
-```bash
-make tests-all
-```
+- **Import tests:** `make tests-imports`
+- **Unit tests:** `make tests-unit`
+- **Integration tests:** `make tests-integration` (requires Docker and `docker compose`)
+- **Full suite:** `make tests-all` (runs imports, integration, then unit; requires Docker)
+
+The `certs/` directory contains TLS certificates used exclusively for integration tests (PostgreSQL `verify-full`). Do not use these certificates in production.
+
+CI runs pre-commit, import tests, and unit tests on push/PR; integration tests run only on manual workflow dispatch or schedule.
 
 ### Serve documentation
 

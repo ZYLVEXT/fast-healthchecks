@@ -2,8 +2,10 @@ name: Tests
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
   push:
-    branches: ["main"]
+    branches: ["main", "dev"]
     tags-ignore: ["**"]
     paths:
       - "examples/**"
@@ -14,10 +16,21 @@ on:
       - "requirements.txt"
       - "uv.lock"
   pull_request:
+    paths:
+      - "examples/**"
+      - "fast_healthchecks/**"
+      - "tests/**"
+      - ".pre-commit-config.yaml"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "uv.lock"
 
 concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
 
@@ -26,15 +39,19 @@ jobs:
     if: github.event.repository.fork == false
     steps:
 
-      - uses: actions/checkout@v5.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Set up Python 3.10
-        uses: actions/setup-python@v6.0.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: '3.10'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6.7.0
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install the project
         run: uv sync --all-extras --dev
@@ -44,9 +61,33 @@ jobs:
         env:
           SKIP: "detect-aws-credentials,no-commit-to-branch"
 
-  unit-tests:
+  audit:
     needs: [pre-commit]
-    name: test with ${{ matrix.python-version }} on ${{ matrix.os }} with ${{ matrix.pydantic-version }}
+    name: pip-audit
+    runs-on: ubuntu-latest
+    if: github.event.repository.fork == false
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.10
+        run: uv python install 3.10
+
+      - name: Install project dependencies
+        run: uv sync --group=dev --all-extras
+
+      - name: Run pip-audit
+        run: uv run pip-audit
+
+  imports-tests:
+    needs: [pre-commit]
+    name: imports ${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     if: github.event.repository.fork == false
     strategy:
@@ -57,60 +98,95 @@ jobs:
           - "3.12"
           - "3.11"
           - "3.10"
-        pydantic-version:
-          - "pydantic-v1"
-          - "pydantic-v2"
         os:
           - ubuntu-latest
-          # - macos-latest
+          - windows-latest
+    env:
+      PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - uses: ./.github/actions/setup-test-env
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run Imports Tests
+        run: make tests-imports
+
+      - uses: ./.github/actions/upload-coverage
+        with:
+          flags: imports
+
+  unit-tests:
+    needs: [pre-commit]
+    name: unit ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    if: github.event.repository.fork == false
+    env:
+      PYTHON: ${{ matrix.python-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.13"
+          - "3.12"
+          - "3.11"
+          - "3.10"
+        os:
+          - ubuntu-latest
           - windows-latest
 
     steps:
-      - uses: actions/checkout@v5.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
-      - name: Install the latest version of uv
 
-        uses: astral-sh/setup-uv@v6.7.0
+      - uses: ./.github/actions/setup-test-env
         with:
-          enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          python-version: ${{ matrix.python-version }}
 
-      - name: Add .local/bin to Windows PATH
-        if: runner.os == 'Windows'
-        shell: bash
-        run: echo "$USERPROFILE/.local/bin" >> $GITHUB_PATH
-
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
-
-      - name: Run Imports Tests
-        run: |
-          uv sync
-          uv pip install pytest pytest-asyncio pytest-cov greenlet
-          uv run pytest --cov --cov-append -m 'imports' tests/unit/test_imports.py
-          uv sync --group=dev --all-extras
-
-      - name: Install Pydantic v1
-        if: matrix.pydantic-version == 'pydantic-v1'
-        run: uv pip install "pydantic>=1.10.23,<2.0.0"
-
-      - name: Install Pydantic v2
-        if: matrix.pydantic-version == 'pydantic-v2'
-        run: uv pip install "pydantic>=2.11.9,<3.0.0"
+      - name: Install project dependencies
+        run: uv sync --group=dev --all-extras
 
       - name: Run Unit Tests
-        run: |
-          uv run pytest --cov --cov-append -m 'unit'
-          uv run coverage xml
+        run: make tests-unit
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5.5.1
+      - uses: ./.github/actions/upload-coverage
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          env_vars: OS,PYTHON
-          fail_ci_if_error: true
           flags: unittests
           name: codecov-umbrella
-          verbose: true
+
+  integration-tests:
+    needs: [pre-commit]
+    name: integration ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    if: github.event.repository.fork == false && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.13"
+          - "3.12"
+          - "3.11"
+          - "3.10"
+        os:
+          - ubuntu-latest
+          - windows-latest
+    env:
+      PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - uses: ./.github/actions/setup-test-env
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Prepare environment for Docker Compose
+        run: cp .env.example .env
+
+      - name: Run integration tests
+        run: make tests-integration
+
+      - uses: ./.github/actions/upload-coverage
+        with:
+          flags: integration

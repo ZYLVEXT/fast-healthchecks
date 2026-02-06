@@ -1,16 +1,28 @@
 """FastStream integration for health checks."""
 
+from __future__ import annotations
+
 from collections.abc import Iterable
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 
 from faststream.asgi.handlers import get
 from faststream.asgi.response import AsgiResponse
+from faststream.asgi.types import Scope
+from faststream.specification.schema.extra.tag import Tag
 
-from fast_healthchecks.integrations.base import HandlerType, Probe, default_handler, make_probe_asgi
+from fast_healthchecks.integrations.base import (
+    HandlerType,
+    Probe,
+    default_handler,
+    healthcheck_shutdown,
+    make_probe_asgi,
+)
 
 if TYPE_CHECKING:
-    from faststream.asgi.types import ASGIApp, Scope
+    from faststream.asgi.types import ASGIApp
+
+__all__ = ["health", "healthcheck_shutdown"]
 
 
 def _add_probe_route(  # noqa: PLR0913
@@ -22,7 +34,7 @@ def _add_probe_route(  # noqa: PLR0913
     failure_status: int = HTTPStatus.SERVICE_UNAVAILABLE,
     debug: bool = False,
     prefix: str = "/health",
-) -> tuple[str, "ASGIApp"]:
+) -> tuple[str, ASGIApp]:
     probe_handler = make_probe_asgi(
         probe,
         success_handler=success_handler,
@@ -32,8 +44,13 @@ def _add_probe_route(  # noqa: PLR0913
         debug=debug,
     )
 
-    @get
-    async def handle_request(scope: "Scope") -> AsgiResponse:  # noqa: ARG001
+    @get(
+        include_in_schema=debug,
+        description=probe.endpoint_summary,
+        tags=[Tag(name="Healthchecks")] if debug else None,
+        unique_id=f"health:{probe.name}",
+    )
+    async def handle_request(_scope: Scope) -> AsgiResponse:
         content, headers, status_code = await probe_handler()
         return AsgiResponse(content, status_code=status_code, headers=headers)
 
@@ -48,8 +65,16 @@ def health(  # noqa: PLR0913
     failure_status: int = HTTPStatus.SERVICE_UNAVAILABLE,
     debug: bool = False,
     prefix: str = "/health",
-) -> Iterable[tuple[str, "ASGIApp"]]:
-    """Make list of routes for healthchecks."""
+) -> Iterable[tuple[str, ASGIApp]]:
+    """Make list of routes for healthchecks.
+
+    Returns:
+        Iterable[tuple[str, ASGIApp]]: Generated healthcheck routes.
+
+    To close health check resources on app shutdown, pass the same probes
+    to ``healthcheck_shutdown(probes)`` and register the returned callback
+    with your FastStream app's shutdown hooks (e.g. ``@app.on_shutdown``).
+    """
     return [
         _add_probe_route(
             probe,

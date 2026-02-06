@@ -8,6 +8,7 @@ from psycopg.connection_async import AsyncConnection, AsyncCursor
 
 from fast_healthchecks.checks.postgresql.base import create_ssl_context
 from fast_healthchecks.checks.postgresql.psycopg import PostgreSQLPsycopgHealthCheck
+from fast_healthchecks.utils import parse_query_string
 from tests.utils import (
     TEST_SSLCERT,
     TEST_SSLKEY,
@@ -793,9 +794,9 @@ pytestmark = pytest.mark.unit
 def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception: type[BaseException] | None) -> None:
     if exception is not None and isinstance(expected, str):
         with pytest.raises(exception, match=expected):
-            PostgreSQLPsycopgHealthCheck(**params)  # ty: ignore[missing-argument]
+            PostgreSQLPsycopgHealthCheck(**params)
     else:
-        obj = PostgreSQLPsycopgHealthCheck(**params)  # ty: ignore[missing-argument]
+        obj = PostgreSQLPsycopgHealthCheck(**params)
         assert obj.to_dict() == expected
 
 
@@ -1142,7 +1143,7 @@ def test_from_dsn(
     exception: type[BaseException] | None,
 ) -> None:
     parse_result: ParseResult = urlparse(args[0])
-    query = {k: unquote(v) for k, v in (q.split("=", 1) for q in parse_result.query.split("&"))}
+    query = parse_query_string(parse_result.query)
     files = [y for x, y in query.items() if x in {"sslcert", "sslkey", "sslrootcert"}]
 
     if exception is not None and isinstance(expected, str):
@@ -1151,13 +1152,13 @@ def test_from_dsn(
     else:
         with create_temp_files(files):
             check = PostgreSQLPsycopgHealthCheck.from_dsn(*args, **kwargs)
-            if "ssl" in expected and expected["ssl"] is not None:  # ty: ignore[invalid-argument-type]
-                expected["ssl"] = create_ssl_context(*expected["ssl"])  # ty: ignore[invalid-argument-type,possibly-unbound-implicit-call]
+            if isinstance(expected, dict) and "ssl" in expected and expected["ssl"] is not None:
+                expected["ssl"] = create_ssl_context(*expected["ssl"])
             assert check.to_dict() == expected
 
 
 @pytest.mark.asyncio
-async def test_psycopg_AsyncConnection_connect_args_kwargs() -> None:  # noqa: N802
+async def test_psycopg_AsyncConnection_connect_args_kwargs() -> None:
     with create_temp_files([TEST_SSLCERT, TEST_SSLKEY, TEST_SSLROOTCERT]):
         health_check = PostgreSQLPsycopgHealthCheck(
             host="localhost2",
@@ -1172,10 +1173,10 @@ async def test_psycopg_AsyncConnection_connect_args_kwargs() -> None:  # noqa: N
             timeout=1.5,
             name="test",
         )
-        AsyncConnection_mock = MagicMock(spec=AsyncConnection)  # noqa: N806
+        AsyncConnection_mock = MagicMock(spec=AsyncConnection)
         closed = PropertyMock(return_value=False)
         type(AsyncConnection_mock).closed = closed
-        AsyncCursor_mock = MagicMock(spec=AsyncCursor)  # noqa: N806
+        AsyncCursor_mock = MagicMock(spec=AsyncCursor)
         AsyncConnection_mock.cursor.return_value = AsyncCursor_mock
         AsyncCursor_mock.__aenter__.return_value = AsyncCursor_mock
         with patch(
@@ -1193,6 +1194,7 @@ async def test_psycopg_AsyncConnection_connect_args_kwargs() -> None:  # noqa: N
                 sslcert=TEST_SSLCERT,
                 sslkey=TEST_SSLKEY,
                 sslrootcert=TEST_SSLROOTCERT,
+                connect_timeout=1,
             )
             asyncpg_connect_mock.assert_awaited_once_with(
                 host="localhost2",
@@ -1204,6 +1206,7 @@ async def test_psycopg_AsyncConnection_connect_args_kwargs() -> None:  # noqa: N
                 sslcert=TEST_SSLCERT,
                 sslkey=TEST_SSLKEY,
                 sslrootcert=TEST_SSLROOTCERT,
+                connect_timeout=1,
             )
             AsyncConnection_mock.cursor.assert_called_once_with()
             AsyncCursor_mock.execute.assert_called_once_with("SELECT 1")
@@ -1233,8 +1236,8 @@ async def test__call_success() -> None:
             timeout=1.5,
             name="test",
         )
-        AsyncConnection_mock = AsyncMock(spec=AsyncConnection)  # noqa: N806
-        AsyncCursor_mock = AsyncMock(spec=AsyncCursor)  # noqa: N806
+        AsyncConnection_mock = AsyncMock(spec=AsyncConnection)
+        AsyncCursor_mock = AsyncMock(spec=AsyncCursor)
         AsyncConnection_mock.cursor.return_value.__aenter__.return_value = AsyncCursor_mock
         AsyncCursor_mock.execute.return_value = None
         AsyncCursor_mock.fetchone.return_value = (1,)
@@ -1262,8 +1265,8 @@ async def test__call_failure() -> None:
             timeout=1.5,
             name="test",
         )
-        AsyncConnection_mock = AsyncMock(spec=AsyncConnection)  # noqa: N806
-        AsyncCursor_mock = AsyncMock(spec=AsyncCursor)  # noqa: N806
+        AsyncConnection_mock = AsyncMock(spec=AsyncConnection)
+        AsyncCursor_mock = AsyncMock(spec=AsyncCursor)
         AsyncConnection_mock.cursor.return_value.__aenter__.return_value = AsyncCursor_mock
         AsyncCursor_mock.execute.side_effect = Exception("Database error")
 

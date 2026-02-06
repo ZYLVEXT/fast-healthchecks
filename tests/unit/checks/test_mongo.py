@@ -1,5 +1,6 @@
+import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -7,6 +8,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from fast_healthchecks.checks.mongo import MongoHealthCheck
 
 pytestmark = pytest.mark.unit
+
+EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
 
 
 @pytest.mark.parametrize(
@@ -315,7 +318,7 @@ def test_from_dsn(
 
 
 @pytest.mark.asyncio
-async def test_AsyncIOMotorClient_args_kwargs() -> None:  # noqa: N802
+async def test_AsyncIOMotorClient_args_kwargs() -> None:
     health_check = MongoHealthCheck(
         hosts="localhost2",
         port=27018,
@@ -360,6 +363,24 @@ async def test_AsyncIOMotorClient_args_kwargs() -> None:  # noqa: N802
 
 
 @pytest.mark.asyncio
+async def test_AsyncIOMotorClient_reused_between_calls() -> None:
+    health_check = MongoHealthCheck(hosts="localhost", port=27017, database="test")
+    mock_client = AsyncMock(spec=AsyncIOMotorClient)
+    mock_client["test"].command = AsyncMock(return_value={"ok": 1})
+    with patch("fast_healthchecks.checks.mongo.AsyncIOMotorClient", return_value=mock_client) as factory:
+        await health_check()
+        await health_check()
+        factory.assert_called_once_with(
+            host="localhost",
+            port=27017,
+            username=None,
+            password=None,
+            authSource="admin",
+            serverSelectionTimeoutMS=5000,
+        )
+
+
+@pytest.mark.asyncio
 async def test__call_success() -> None:
     health_check = MongoHealthCheck(
         hosts="localhost",
@@ -381,7 +402,6 @@ async def test__call_success() -> None:
         assert result.error_details is None
         mock_client["test"].command.assert_called_once_with("ping")
         mock_client["test"].command.assert_awaited_once_with("ping")
-        mock_client.close.assert_called_once_with()
 
 
 @pytest.mark.asyncio
@@ -398,7 +418,7 @@ async def test__call_failure() -> None:
     )
     mock_client = AsyncMock(spec=AsyncIOMotorClient)
     mock_client["test"].command = AsyncMock()
-    mock_client["test"].command.side_effect = BaseException
+    mock_client["test"].command.side_effect = Exception("Connection failed")
     with patch("fast_healthchecks.checks.mongo.AsyncIOMotorClient", return_value=mock_client):
         result = await health_check()
         assert result.healthy is False
@@ -406,4 +426,65 @@ async def test__call_failure() -> None:
         assert result.error_details is not None
         mock_client["test"].command.assert_called_once_with("ping")
         mock_client["test"].command.assert_awaited_once_with("ping")
-        mock_client.close.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_aclose_clears_client() -> None:
+    health_check = MongoHealthCheck(hosts="localhost", port=27017, auth_source="admin")
+    db = MagicMock()
+    db.command = AsyncMock(return_value={"ok": 1})
+    mock_client = MagicMock()
+    mock_client.__getitem__ = MagicMock(return_value=db)
+    with patch("fast_healthchecks.checks.mongo.AsyncIOMotorClient", return_value=mock_client) as factory:
+        await health_check()
+        assert health_check._client is not None
+        await health_check.aclose()
+        assert health_check._client is None
+        assert health_check._client_loop is None
+        await health_check()
+        assert factory.call_count == EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE
+
+
+@pytest.mark.asyncio
+async def test_aclose_idempotent_when_no_client() -> None:
+    health_check = MongoHealthCheck(hosts="localhost", port=27017, auth_source="admin")
+    await health_check.aclose()
+    assert health_check._client is None
+
+
+@pytest.mark.asyncio
+async def test_loop_invalidation_recreates_client() -> None:
+    health_check = MongoHealthCheck(hosts="localhost", port=27017, auth_source="admin")
+    real_loop = asyncio.get_running_loop()
+    other_loop = object()
+    db = MagicMock()
+    db.command = AsyncMock(return_value={"ok": 1})
+    mock_client = MagicMock()
+    mock_client.__getitem__ = MagicMock(return_value=db)
+    with (
+        patch("fast_healthchecks.checks.mongo.AsyncIOMotorClient", return_value=mock_client) as factory,
+        patch(
+            "fast_healthchecks.checks.mongo.asyncio.get_running_loop",
+            side_effect=[real_loop, real_loop, other_loop, other_loop],
+        ),
+    ):
+        await health_check()
+        await health_check()
+        assert factory.call_count == EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE
+
+
+@pytest.mark.asyncio
+async def test_get_client_with_no_running_loop() -> None:
+    health_check = MongoHealthCheck(hosts="localhost", port=27017, auth_source="admin")
+    db = MagicMock()
+    db.command = AsyncMock(return_value={"ok": 1})
+    mock_client = MagicMock()
+    mock_client.__getitem__ = MagicMock(return_value=db)
+    with (
+        patch("fast_healthchecks.checks.mongo.asyncio.get_running_loop", side_effect=RuntimeError),
+        patch("fast_healthchecks.checks.mongo.AsyncIOMotorClient", return_value=mock_client) as factory,
+    ):
+        result = await health_check()
+        assert result.healthy is True
+        factory.assert_called_once()
+        assert health_check._client_loop is None

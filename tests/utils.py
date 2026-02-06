@@ -1,3 +1,4 @@
+import os
 import shutil
 import tempfile
 from collections.abc import Generator
@@ -25,19 +26,21 @@ SSL_FILES_MAP = {
 }
 
 
-temp_dir = tempfile.gettempdir()
+temp_dir = Path(tempfile.gettempdir()) / f"fast_healthchecks-{os.getpid()}"
+temp_dir.mkdir(parents=True, exist_ok=True)
 
-TEST_SSLCERT = quote(f"{temp_dir}/{SSLCERT_NAME}")
-TEST_SSLKEY = quote(f"{temp_dir}/{SSLKEY_NAME}")
-TEST_SSLROOTCERT = quote(f"{temp_dir}/{SSLROOTCERT_NAME}")
+TEST_SSLCERT = quote(str(temp_dir / SSLCERT_NAME))
+TEST_SSLKEY = quote(str(temp_dir / SSLKEY_NAME))
+TEST_SSLROOTCERT = quote(str(temp_dir / SSLROOTCERT_NAME))
 
 
 @contextmanager
 def create_temp_files(temp_file_paths: list[str]) -> Generator[None, None, None]:
     paths = [Path(temp_file_path) for temp_file_path in temp_file_paths]
     for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
         if path.name in SSL_FILES_MAP:
-            shutil.copy(SSL_FILES_MAP[path.name], path)
+            shutil.copyfile(SSL_FILES_MAP[path.name], path)
         else:
             with path.open("w") as f:
                 f.write("Temporary content.")
@@ -46,4 +49,4 @@ def create_temp_files(temp_file_paths: list[str]) -> Generator[None, None, None]
     yield
 
     for path in paths:
-        path.unlink()
+        path.unlink(missing_ok=True)

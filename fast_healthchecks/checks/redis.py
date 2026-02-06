@@ -17,6 +17,8 @@ Example:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from traceback import format_exc
 from typing import TYPE_CHECKING, Any, TypedDict, final
 
@@ -24,7 +26,7 @@ from fast_healthchecks.checks._base import DEFAULT_HC_TIMEOUT, HealthCheckDSN
 from fast_healthchecks.compat import RedisDsn
 from fast_healthchecks.models import HealthCheckResult
 
-IMPORT_ERROR_MSG = "redis is not installed. Install it with `pip install redis`."
+IMPORT_ERROR_MSG = "redis is not installed. Install it with `pip install fast-healthchecks[redis]`."
 
 try:
     from redis.asyncio import Redis
@@ -59,6 +61,8 @@ class RedisHealthCheck(HealthCheckDSN[HealthCheckResult]):
     """
 
     __slots__ = (
+        "_client",
+        "_client_loop",
         "_database",
         "_host",
         "_name",
@@ -75,12 +79,14 @@ class RedisHealthCheck(HealthCheckDSN[HealthCheckResult]):
     _database: str | int
     _user: str | None
     _password: str | None
-    _timeout: float | None
+    _timeout: float
     _name: str
     _ssl: bool
     _ssl_ca_certs: str | None
+    _client: Redis | None
+    _client_loop: asyncio.AbstractEventLoop | None
 
-    def __init__(  # noqa: PLR0913, D417
+    def __init__(  # noqa: PLR0913
         self,
         *,
         host: str = "localhost",
@@ -101,6 +107,8 @@ class RedisHealthCheck(HealthCheckDSN[HealthCheckResult]):
             database: The database to connect to.
             user: The user to authenticate with.
             password: The password to authenticate with.
+            ssl: Whether to use SSL.
+            ssl_ca_certs: Path to CA certificates for SSL.
             timeout: The timeout for the connection.
             name: The name of the health check.
         """
@@ -111,15 +119,43 @@ class RedisHealthCheck(HealthCheckDSN[HealthCheckResult]):
         self._password = password
         self._ssl = ssl
         self._ssl_ca_certs = ssl_ca_certs
-        self._timeout = timeout
+        self._timeout = DEFAULT_HC_TIMEOUT if timeout is None else timeout
         self._name = name
+        self._client = None
+        self._client_loop = None
+
+    async def aclose(self) -> None:
+        """Close the cached Redis client if present."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+            self._client_loop = None
+
+    def _get_client(self) -> Redis:
+        if self._client is None:
+            try:
+                self._client_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._client_loop = None
+            self._client = Redis(
+                host=self._host,
+                port=self._port,
+                db=self._database,
+                username=self._user,
+                password=self._password,
+                socket_timeout=self._timeout,
+                single_connection_client=True,
+                ssl=self._ssl,
+                ssl_ca_certs=self._ssl_ca_certs,
+            )
+        return self._client
 
     @classmethod
     def parse_dsn(cls, dsn: str) -> ParseDSNResult:
         """Parse the DSN and return the results.
 
         Args:
-            dsn (str): The DSN to parse.
+            dsn: The DSN to parse.
 
         Returns:
             ParseDSNResult: The results of parsing the DSN.
@@ -135,7 +171,7 @@ class RedisHealthCheck(HealthCheckDSN[HealthCheckResult]):
         name: str = "Redis",
         timeout: float = DEFAULT_HC_TIMEOUT,
     ) -> RedisHealthCheck:
-        """Create a RedisHealthCheck instance from a DSN.
+        """Create a RedisHealthCheck from a DSN.
 
         Args:
             dsn: The DSN to connect to.
@@ -145,7 +181,7 @@ class RedisHealthCheck(HealthCheckDSN[HealthCheckResult]):
         Returns:
             A RedisHealthCheck instance.
         """
-        dsn = cls.validate_dsn(dsn, type_=RedisDsn)
+        dsn = cls.validate_dsn(dsn, allowed_schemes=("redis", "rediss"))
         parsed_dsn = cls.parse_dsn(dsn)
         parse_result = parsed_dsn["parse_result"]
         ssl_ca_certs: str | None = parse_result.get("ssl_ca_certs", None)
@@ -166,30 +202,30 @@ class RedisHealthCheck(HealthCheckDSN[HealthCheckResult]):
         """Perform a health check on Redis.
 
         Returns:
-            A HealthCheckResult instance.
+            HealthCheckResult: The result of the health check.
         """
         try:
-            async with Redis(
-                host=self._host,
-                port=self._port,
-                db=self._database,
-                username=self._user,
-                password=self._password,
-                socket_timeout=self._timeout,
-                single_connection_client=True,
-                ssl=self._ssl,
-                ssl_ca_certs=self._ssl_ca_certs,
-            ) as redis:
-                healthy: bool = await redis.ping()
-                return HealthCheckResult(name=self._name, healthy=healthy)
-        except BaseException:  # noqa: BLE001
+            try:
+                running = asyncio.get_running_loop()
+            except RuntimeError:
+                running = None
+            if self._client is not None and self._client_loop is not running:
+                with contextlib.suppress(Exception):
+                    await self._client.aclose()
+                self._client = None
+                self._client_loop = None
+            redis = self._get_client()
+            healthy_raw = redis.ping()
+            healthy = bool(await healthy_raw) if asyncio.iscoroutine(healthy_raw) else bool(healthy_raw)
+            return HealthCheckResult(name=self._name, healthy=healthy)
+        except Exception:  # noqa: BLE001
             return HealthCheckResult(name=self._name, healthy=False, error_details=format_exc())
 
     def to_dict(self) -> dict[str, Any]:
-        """Converts the RedisHealthCheck object to a dictionary.
+        """Convert the RedisHealthCheck to a dictionary.
 
         Returns:
-            A dictionary with the RedisHealthCheck attributes.
+            dict: The check attributes as a dictionary.
         """
         return {
             "host": self._host,

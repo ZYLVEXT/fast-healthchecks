@@ -17,25 +17,22 @@ Example:
     print(result.healthy)
 """
 
+from __future__ import annotations
+
 from traceback import format_exc
-from typing import Any, TypeAlias, TypedDict, final
+from typing import Any, TypedDict, final
 from urllib.parse import ParseResult, urlparse
 
 from fast_healthchecks.checks._base import DEFAULT_HC_TIMEOUT, HealthCheckDSN
-from fast_healthchecks.compat import PYDANTIC_INSTALLED
+from fast_healthchecks.compat import AmqpDsn
 from fast_healthchecks.models import HealthCheckResult
 
-IMPORT_ERROR_MSG = "aio-pika is not installed. Install it with `pip install aio-pika`."
+IMPORT_ERROR_MSG = "aio-pika is not installed. Install it with `pip install fast-healthchecks[aio-pika]`."
 
 try:
     import aio_pika
 except ImportError as exc:
     raise ImportError(IMPORT_ERROR_MSG) from exc
-
-if PYDANTIC_INSTALLED:
-    from pydantic import AmqpDsn
-else:  # pragma: no cover
-    AmqpDsn: TypeAlias = str
 
 
 class ParseDSNResult(TypedDict, total=True):
@@ -82,10 +79,10 @@ class RabbitMQHealthCheck(HealthCheckDSN[HealthCheckResult]):
         timeout: float = DEFAULT_HC_TIMEOUT,
         name: str = "RabbitMQ",
     ) -> None:
-        """Initializes the RabbitMQHealthCheck class.
+        """Initialize the RabbitMQHealthCheck.
 
         Args:
-            host: The RabbitMQ host
+            host: The RabbitMQ host.
             user: The RabbitMQ user
             password: The RabbitMQ password
             port: The RabbitMQ port
@@ -108,7 +105,7 @@ class RabbitMQHealthCheck(HealthCheckDSN[HealthCheckResult]):
         """Parse the DSN and return the results.
 
         Args:
-            dsn (str): The DSN to parse.
+            dsn: The DSN to parse.
 
         Returns:
             ParseDSNResult: The results of parsing the DSN.
@@ -119,22 +116,22 @@ class RabbitMQHealthCheck(HealthCheckDSN[HealthCheckResult]):
     @classmethod
     def from_dsn(
         cls,
-        dsn: "AmqpDsn | str",
+        dsn: AmqpDsn | str,
         *,
         name: str = "RabbitMQ",
         timeout: float = DEFAULT_HC_TIMEOUT,
-    ) -> "RabbitMQHealthCheck":
-        """Creates a RabbitMQHealthCheck instance from a DSN.
+    ) -> RabbitMQHealthCheck:
+        """Create a RabbitMQHealthCheck from a DSN.
 
         Args:
-            dsn: The DSN to create the RabbitMQHealthCheck instance from.
+            dsn: The DSN for the RabbitMQ connection.
             name: The name of the health check.
             timeout: The timeout for the health check.
 
         Returns:
-            A RabbitMQHealthCheck instance.
+            RabbitMQHealthCheck: The configured check instance.
         """
-        dsn = cls.validate_dsn(dsn, type_=AmqpDsn)
+        dsn = cls.validate_dsn(dsn, allowed_schemes=("amqp", "amqps"))
         parsed_dsn = cls.parse_dsn(dsn)
         parse_result = parsed_dsn["parse_result"]
         return RabbitMQHealthCheck(
@@ -149,10 +146,10 @@ class RabbitMQHealthCheck(HealthCheckDSN[HealthCheckResult]):
         )
 
     async def __call__(self) -> HealthCheckResult:
-        """Performs the health check on RabbitMQ.
+        """Perform the health check on RabbitMQ.
 
         Returns:
-            A HealthCheckResult object.
+            HealthCheckResult: The result of the health check.
         """
         try:
             async with await aio_pika.connect_robust(
@@ -165,14 +162,14 @@ class RabbitMQHealthCheck(HealthCheckDSN[HealthCheckResult]):
                 timeout=self._timeout,
             ):
                 return HealthCheckResult(name=self._name, healthy=True)
-        except BaseException:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             return HealthCheckResult(name=self._name, healthy=False, error_details=format_exc())
 
     def to_dict(self) -> dict[str, Any]:
-        """Converts the RabbitMQHealthCheck object to a dictionary.
+        """Convert the RabbitMQHealthCheck to a dictionary.
 
         Returns:
-            A dictionary with the RabbitMQHealthCheck attributes.
+            dict: The check attributes as a dictionary.
         """
         return {
             "host": self._host,

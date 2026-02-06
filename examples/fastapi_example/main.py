@@ -1,12 +1,12 @@
 from fastapi import FastAPI, status
 
 from examples.probes import (
-    LIVENESS_CHECKS,
-    READINESS_CHECKS,
-    READINESS_CHECKS_FAIL,
-    READINESS_CHECKS_SUCCESS,
-    STARTUP_CHECKS,
     custom_handler,
+    get_liveness_checks,
+    get_readiness_checks,
+    get_readiness_checks_fail,
+    get_readiness_checks_success,
+    get_startup_checks,
 )
 from fast_healthchecks.integrations.base import Probe
 from fast_healthchecks.integrations.fastapi import HealthcheckRouter
@@ -16,15 +16,15 @@ app_integration.include_router(
     HealthcheckRouter(
         Probe(
             name="liveness",
-            checks=LIVENESS_CHECKS,
+            checks=get_liveness_checks(),
         ),
         Probe(
             name="readiness",
-            checks=READINESS_CHECKS,
+            checks=get_readiness_checks(),
         ),
         Probe(
             name="startup",
-            checks=STARTUP_CHECKS,
+            checks=get_startup_checks(),
         ),
         debug=True,
         prefix="/health",
@@ -40,7 +40,7 @@ app_success.include_router(
         ),
         Probe(
             name="readiness",
-            checks=READINESS_CHECKS_SUCCESS,
+            checks=get_readiness_checks_success(),
         ),
         Probe(
             name="startup",
@@ -60,7 +60,7 @@ app_fail.include_router(
         ),
         Probe(
             name="readiness",
-            checks=READINESS_CHECKS_FAIL,
+            checks=get_readiness_checks_fail(),
         ),
         Probe(
             name="startup",
@@ -81,7 +81,7 @@ app_custom.include_router(
         ),
         Probe(
             name="readiness",
-            checks=READINESS_CHECKS_SUCCESS,
+            checks=get_readiness_checks_success(),
             summary="Check if the application is ready",
         ),
         Probe(

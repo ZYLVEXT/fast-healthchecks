@@ -14,14 +14,18 @@ Example:
     print(result.healthy)
 """
 
+from __future__ import annotations
+
+import asyncio
+import contextlib
 from http import HTTPStatus
 from traceback import format_exc
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, Any, final
 
 from fast_healthchecks.checks._base import DEFAULT_HC_TIMEOUT, HealthCheck
 from fast_healthchecks.models import HealthCheckResult
 
-IMPORT_ERROR_MSG = "httpx is not installed. Install it with `pip install httpx`."
+IMPORT_ERROR_MSG = "httpx is not installed. Install it with `pip install fast-healthchecks[httpx]`."
 
 try:
     from httpx import AsyncClient, AsyncHTTPTransport, BasicAuth, Response
@@ -47,6 +51,8 @@ class UrlHealthCheck(HealthCheck[HealthCheckResult]):
 
     __slots__ = (
         "_auth",
+        "_client",
+        "_client_loop",
         "_follow_redirects",
         "_name",
         "_password",
@@ -57,7 +63,7 @@ class UrlHealthCheck(HealthCheck[HealthCheckResult]):
         "_verify_ssl",
     )
 
-    _url: "URLTypes"
+    _url: URLTypes
     _username: str | None
     _password: str | None
     _auth: BasicAuth | None
@@ -66,11 +72,13 @@ class UrlHealthCheck(HealthCheck[HealthCheckResult]):
     _follow_redirects: bool
     _timeout: float
     _name: str
+    _client: AsyncClient | None
+    _client_loop: asyncio.AbstractEventLoop | None
 
-    def __init__(  # noqa: PLR0913, D417
+    def __init__(  # noqa: PLR0913
         self,
         *,
-        url: "URLTypes",
+        url: URLTypes,
         username: str | None = None,
         password: str | None = None,
         verify_ssl: bool = True,
@@ -78,13 +86,18 @@ class UrlHealthCheck(HealthCheck[HealthCheckResult]):
         timeout: float = DEFAULT_HC_TIMEOUT,
         name: str = "HTTP",
     ) -> None:
-        """Initializes the health check.
+        """Initialize the health check.
+
+        Warning:
+            Pass only trusted URLs from application configuration. Do not use
+            user-controlled input for ``url`` to avoid SSRF.
 
         Args:
             url: The URL to connect to.
             username: The user to authenticate with.
             password: The password to authenticate with.
             verify_ssl: Whether to verify the SSL certificate.
+            follow_redirects: Whether to follow redirects.
             timeout: The timeout for the connection.
             name: The name of the health check.
         """
@@ -93,29 +106,72 @@ class UrlHealthCheck(HealthCheck[HealthCheckResult]):
         self._password = password
         self._auth = BasicAuth(self._username, self._password or "") if self._username else None
         self._verify_ssl = verify_ssl
-        self._transport = AsyncHTTPTransport(verify=self._verify_ssl) if self._verify_ssl else None
+        self._transport = AsyncHTTPTransport(verify=self._verify_ssl)
         self._follow_redirects = follow_redirects
         self._timeout = timeout
         self._name = name
+        self._client = None
+        self._client_loop = None
 
-    async def __call__(self) -> HealthCheckResult:
-        """Performs the health check.
+    async def aclose(self) -> None:
+        """Close the cached HTTP client if present."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+            self._client_loop = None
 
-        Returns:
-            A HealthCheckResult object with the result of the health check.
-        """
-        try:
-            async with AsyncClient(
+    def _get_client(self) -> AsyncClient:
+        if self._client is None:
+            try:
+                self._client_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._client_loop = None
+            self._client = AsyncClient(
                 auth=self._auth,
                 timeout=self._timeout,
                 transport=self._transport,
                 follow_redirects=self._follow_redirects,
-            ) as client:
-                response: Response = await client.get(self._url)
-                if response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR or (
-                    self._username and response.status_code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}
-                ):
-                    response.raise_for_status()
-                return HealthCheckResult(name=self._name, healthy=response.is_success)
-        except BaseException:  # noqa: BLE001
+            )
+        return self._client
+
+    async def __call__(self) -> HealthCheckResult:
+        """Perform the health check.
+
+        Returns:
+            HealthCheckResult: The result of the health check.
+        """
+        try:
+            try:
+                running = asyncio.get_running_loop()
+            except RuntimeError:
+                running = None
+            if self._client is not None and self._client_loop is not running:
+                with contextlib.suppress(Exception):
+                    await self._client.aclose()
+                self._client = None
+                self._client_loop = None
+            client = self._get_client()
+            response: Response = await client.get(self._url)
+            if response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR or (
+                self._username and response.status_code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}
+            ):
+                response.raise_for_status()
+            return HealthCheckResult(name=self._name, healthy=response.is_success)
+        except Exception:  # noqa: BLE001
             return HealthCheckResult(name=self._name, healthy=False, error_details=format_exc())
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert the UrlHealthCheck to a dictionary.
+
+        Returns:
+            dict: The check attributes as a dictionary.
+        """
+        return {
+            "url": str(self._url),
+            "username": self._username,
+            "password": self._password,
+            "verify_ssl": self._verify_ssl,
+            "follow_redirects": self._follow_redirects,
+            "timeout": self._timeout,
+            "name": self._name,
+        }

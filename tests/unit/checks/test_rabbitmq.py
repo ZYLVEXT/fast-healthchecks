@@ -159,9 +159,9 @@ pytestmark = pytest.mark.unit
 def test_init(params: dict[str, Any], expected: dict[str, Any], exception: type[BaseException] | None) -> None:
     if exception is not None:
         with pytest.raises(exception, match=str(expected)):
-            RabbitMQHealthCheck(**params)  # ty: ignore[missing-argument]
+            RabbitMQHealthCheck(**params)
     else:
-        obj = RabbitMQHealthCheck(**params)  # ty: ignore[missing-argument]
+        obj = RabbitMQHealthCheck(**params)
         assert obj.to_dict() == expected
 
 

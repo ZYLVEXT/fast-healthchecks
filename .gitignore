@@ -176,3 +176,6 @@ report.xml
 
 .copier-answers.yml
 .gitlab-ci.yml
+.cursor/
+.scannerwork/
+.env

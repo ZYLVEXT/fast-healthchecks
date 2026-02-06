@@ -1,11 +1,14 @@
-"""This module contains the base class for PostgreSQL health checks."""
+"""This module provides the base class for PostgreSQL health checks."""
+
+from __future__ import annotations
 
 import ssl
 from functools import lru_cache
 from typing import Generic, Literal, TypeAlias, TypedDict, cast
-from urllib.parse import ParseResult, unquote, urlparse
+from urllib.parse import ParseResult, urlparse
 
 from fast_healthchecks.checks._base import HealthCheckDSN, T_co
+from fast_healthchecks.utils import parse_query_string
 
 SslMode: TypeAlias = Literal["disable", "allow", "prefer", "require", "verify-ca", "verify-full"]
 
@@ -21,7 +24,7 @@ class ParseDSNResult(TypedDict, total=True):
     sslctx: ssl.SSLContext | None
 
 
-@lru_cache
+@lru_cache(maxsize=128, typed=True)
 def create_ssl_context(
     sslmode: SslMode,
     sslcert: str | None,
@@ -31,13 +34,16 @@ def create_ssl_context(
     """Create an SSL context from the query parameters.
 
     Args:
-        sslmode (SslMode): The SSL mode to use.
-        sslcert (str | None): The path to the SSL certificate.
-        sslkey (str | None): The path to the SSL key.
-        sslrootcert (str | None): The path to the SSL root certificate.
+        sslmode: The SSL mode to use.
+        sslcert: The path to the SSL certificate.
+        sslkey: The path to the SSL key.
+        sslrootcert: The path to the SSL root certificate.
 
     Returns:
         ssl.SSLContext | None: The SSL context.
+
+    Raises:
+        ValueError: If provided SSL options are invalid for selected mode.
     """
     sslctx: ssl.SSLContext | None = None
     match sslmode:
@@ -85,10 +91,10 @@ class BasePostgreSQLHealthCheck(HealthCheckDSN[T_co], Generic[T_co]):
         """Create an SSL context from the query parameters.
 
         Args:
-            sslmode (SslMode): The SSL mode to use.
-            sslcert (str | None): The path to the SSL certificate.
-            sslkey (str | None): The path to the SSL key.
-            sslrootcert (str | None): The path to the SSL root certificate.
+            sslmode: The SSL mode to use.
+            sslcert: The path to the SSL certificate.
+            sslkey: The path to the SSL key.
+            sslrootcert: The path to the SSL root certificate.
 
         Returns:
             ssl.SSLContext | None: The SSL context.
@@ -100,7 +106,7 @@ class BasePostgreSQLHealthCheck(HealthCheckDSN[T_co], Generic[T_co]):
         """Validate the SSL mode.
 
         Args:
-            mode (str): The SSL mode to validate.
+            mode: The SSL mode to validate.
 
         Returns:
             SslMode: The validated SSL mode.
@@ -118,17 +124,13 @@ class BasePostgreSQLHealthCheck(HealthCheckDSN[T_co], Generic[T_co]):
         """Parse the DSN and return the results.
 
         Args:
-            dsn (str): The DSN to parse.
+            dsn: The DSN to parse.
 
         Returns:
             ParseDSNResult: The results of parsing the DSN.
         """
         parse_result: ParseResult = urlparse(dsn)
-        query = (
-            {k: unquote(v) for k, v in (q.split("=", 1) for q in parse_result.query.split("&"))}
-            if parse_result.query
-            else {}
-        )
+        query = parse_query_string(parse_result.query)
         sslmode: SslMode = cls.validate_sslmode(query.get("sslmode", "disable"))
         sslcert: str | None = query.get("sslcert")
         sslkey: str | None = query.get("sslkey")

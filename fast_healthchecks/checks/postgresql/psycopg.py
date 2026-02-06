@@ -1,4 +1,4 @@
-"""The module contains a health check for PostgreSQL using psycopg.
+"""This module provides a health check for PostgreSQL using psycopg.
 
 Classes:
     PostgreSQLPsycopgHealthCheck: A class for health checking PostgreSQL using psycopg.
@@ -23,6 +23,8 @@ Example:
     print(result.healthy)
 """
 
+from __future__ import annotations
+
 from traceback import format_exc
 from typing import TYPE_CHECKING, Any
 
@@ -31,7 +33,7 @@ from fast_healthchecks.checks.postgresql.base import BasePostgreSQLHealthCheck, 
 from fast_healthchecks.compat import PostgresDsn
 from fast_healthchecks.models import HealthCheckResult
 
-IMPORT_ERROR_MSG = "psycopg is not installed. Install it with `pip install psycopg`."
+IMPORT_ERROR_MSG = "psycopg is not installed. Install it with `pip install fast-healthchecks[psycopg]`."
 
 try:
     import psycopg
@@ -46,17 +48,17 @@ class PostgreSQLPsycopgHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
     """Health check class for PostgreSQL using psycopg.
 
     Attributes:
-        _name (str): The name of the health check.
-        _host (str): The hostname of the PostgreSQL server.
-        _port (int): The port number of the PostgreSQL server.
-        _user (str | None): The username for authentication.
-        _password (str | None): The password for authentication.
-        _database (str | None): The database name.
-        _sslmode (SslMode | None): The SSL mode to use for the connection.
-        _sslcert (str | None): The path to the SSL certificate file.
-        _sslkey (str | None): The path to the SSL key file.
-        _sslrootcert (str | None): The path to the SSL root certificate file.
-        _timeout (float): The timeout for the health check.
+        _name: The name of the health check.
+        _host: The hostname of the PostgreSQL server.
+        _port: The port number of the PostgreSQL server.
+        _user: The username for authentication.
+        _password: The password for authentication.
+        _database: The database name.
+        _sslmode: The SSL mode to use for the connection.
+        _sslcert: The path to the SSL certificate file.
+        _sslkey: The path to the SSL key file.
+        _sslrootcert: The path to the SSL root certificate file.
+        _timeout: The timeout for the health check.
     """
 
     __slots__ = (
@@ -100,20 +102,20 @@ class PostgreSQLPsycopgHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
         timeout: float = DEFAULT_HC_TIMEOUT,
         name: str = "PostgreSQL",
     ) -> None:
-        """Initializes the PostgreSQLPsycopgHealthCheck instance.
+        """Initialize the PostgreSQLPsycopgHealthCheck.
 
         Args:
-            host (str): The hostname of the PostgreSQL server.
-            port (int): The port number of the PostgreSQL server.
-            user (str | None): The username for authentication.
-            password (str | None): The password for authentication.
-            database (str | None): The database name.
-            timeout (float): The timeout for the health check.
-            sslmode (SslMode | None): The SSL mode to use for the connection.
-            sslcert (str | None): The path to the SSL certificate file.
-            sslkey (str | None): The path to the SSL key file.
-            sslrootcert (str | None): The path to the SSL root certificate file.
-            name (str): The name of the health check.
+            host: The hostname of the PostgreSQL server.
+            port: The port number of the PostgreSQL server.
+            user: The username for authentication.
+            password: The password for authentication.
+            database: The database name.
+            sslmode: The SSL mode to use for the connection.
+            sslcert: The path to the SSL certificate file.
+            sslkey: The path to the SSL key file.
+            sslrootcert: The path to the SSL root certificate file.
+            timeout: The timeout for the health check.
+            name: The name of the health check.
         """
         self._host = host
         self._port = port
@@ -130,22 +132,22 @@ class PostgreSQLPsycopgHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
     @classmethod
     def from_dsn(
         cls,
-        dsn: "PostgresDsn | str",
+        dsn: PostgresDsn | str,
         *,
         name: str = "PostgreSQL",
         timeout: float = DEFAULT_HC_TIMEOUT,
-    ) -> "PostgreSQLPsycopgHealthCheck":
-        """Creates a PostgreSQLPsycopgHealthCheck instance from a DSN.
+    ) -> PostgreSQLPsycopgHealthCheck:
+        """Create a PostgreSQLPsycopgHealthCheck from a DSN.
 
         Args:
-            dsn (PostgresDsn | str): The DSN for the PostgreSQL connection.
-            name (str): The name of the health check.
-            timeout (float): The timeout for the health check.
+            dsn: The DSN for the PostgreSQL connection.
+            name: The name of the health check.
+            timeout: The timeout for the health check.
 
         Returns:
-            PostgreSQLPsycopgHealthCheck: The health check instance.
+            PostgreSQLPsycopgHealthCheck: The configured check instance.
         """
-        dsn = cls.validate_dsn(dsn, type_=PostgresDsn)
+        dsn = cls.validate_dsn(dsn, allowed_schemes=("postgresql", "postgres"))
         parsed_dsn = cls.parse_dsn(dsn)
         parse_result = parsed_dsn["parse_result"]
         return cls(
@@ -163,7 +165,7 @@ class PostgreSQLPsycopgHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
         )
 
     async def __call__(self) -> HealthCheckResult:
-        """Performs the health check.
+        """Perform the health check.
 
         Returns:
             HealthCheckResult: The result of the health check.
@@ -180,12 +182,13 @@ class PostgreSQLPsycopgHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
                 sslcert=self._sslcert,
                 sslkey=self._sslkey,
                 sslrootcert=self._sslrootcert,
+                connect_timeout=int(self._timeout),
             )
             async with connection.cursor() as cursor:
                 await cursor.execute("SELECT 1")
                 healthy: bool = bool(await cursor.fetchone())
                 return HealthCheckResult(name=self._name, healthy=healthy)
-        except BaseException:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             return HealthCheckResult(name=self._name, healthy=False, error_details=format_exc())
         finally:
             if connection is not None and not connection.closed:
@@ -193,10 +196,10 @@ class PostgreSQLPsycopgHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
                 await connection.close()
 
     def to_dict(self) -> dict[str, Any]:
-        """Converts the PostgreSQLPsycopgHealthCheck object to a dictionary.
+        """Convert the PostgreSQLPsycopgHealthCheck to a dictionary.
 
         Returns:
-            A dictionary with the PostgreSQLPsycopgHealthCheck attributes.
+            dict: The check attributes as a dictionary.
         """
         return {
             "host": self._host,

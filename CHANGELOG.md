@@ -1,14 +1,44 @@
+## Unreleased
+
+### Feat
+
+- **integrations**: add `healthcheck_shutdown`, `close_probes`, `run_probe` for resource cleanup and non-ASGI usage
+- **integrations**: add `HealthcheckRouter.close()` for FastAPI lifespan shutdown
+- **probe**: add `allow_partial_failure` option (healthy when at least one check passes)
+- **checks**: add `aclose()` to Redis, Kafka, Mongo, OpenSearch, URL checks for client cleanup
+- **kafka**: add `from_dsn()` and client caching
+- **ci**: add pip-audit job, split tests into imports/unit/integration, add scheduled runs
+- **ci**: add workflow inputs for bump (increment, release_notes)
+- **docker**: add healthchecks to Compose services, Kafka waits for healthy Zookeeper
+- **docs**: document lifecycle, probe options, DSN formats, `run_probe` usage
+
+### Fix
+
+- **dsn**: replace Pydantic with plain `str` and `urlsplit` validation
+- **function**: use `get_running_loop()`, honor bool return from check function
+- **default_handler**: return empty body for healthy responses
+- **dependencies**: drop pydantic extra, upgrade asyncpg, psycopg, redis, aiokafka, motor, fastapi, faststream, litestar, opensearch
+- **makefile**: use `docker compose --wait`, add `pytest -n auto` for parallel tests
+- **examples**: use factory functions instead of module-level probe constants
+- **changelog**: fix typos in previous entries
+
+### Refactor
+
+- **checks**: change `checks` from Iterable to Sequence
+- **ci**: add composite actions (setup-test-env, upload-coverage), remove Pydantic matrix
+- **project**: development status Planning → Production/Stable, license inline in pyproject
+
 ## 0.2.4 (2025-09-19)
 
 ### Fix
 
-- **typing**: make typing not failable
+- **typing**: prevent typing from failing
 
 ## 0.2.3 (2025-09-19)
 
 ### Fix
 
-- **all**: upgrade dependencies, make tests more stable, swith `mypy` to `ty`
+- **all**: upgrade dependencies, make tests more stable, switch `mypy` to `ty`
 
 ## 0.2.2 (2025-04-16)
 
@@ -20,7 +50,7 @@
 
 ### Fix
 
-- **mongo**: added support multihost for MongoDB
+- **mongo**: added multihost support for MongoDB
 
 ## 0.2.0 (2025-02-20)
 
@@ -38,13 +68,13 @@
 
 ### Refactor
 
-- **tests**: move out tests `to_dict` method
+- **tests**: move `to_dict` method out of tests
 
 ## 0.1.5 (2025-01-23)
 
 ### Fix
 
-- **redis**: added support for ssl connections
+- **redis**: added support for SSL connections
 
 ## 0.1.4 (2025-01-22)
 

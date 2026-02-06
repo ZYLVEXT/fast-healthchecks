@@ -1,4 +1,6 @@
-"""FastAPI integration for health checks."""
+"""Litestar integration for health checks."""
+
+from __future__ import annotations
 
 from collections.abc import Iterable
 from http import HTTPStatus
@@ -6,7 +8,15 @@ from http import HTTPStatus
 from litestar import Response, get
 from litestar.handlers.http_handlers import HTTPRouteHandler
 
-from fast_healthchecks.integrations.base import HandlerType, Probe, default_handler, make_probe_asgi
+from fast_healthchecks.integrations.base import (
+    HandlerType,
+    Probe,
+    default_handler,
+    healthcheck_shutdown,
+    make_probe_asgi,
+)
+
+__all__ = ["health", "healthcheck_shutdown"]
 
 
 def _add_probe_route(  # noqa: PLR0913
@@ -32,7 +42,8 @@ def _add_probe_route(  # noqa: PLR0913
         path=f"{prefix.removesuffix('/')}/{probe.name.removeprefix('/')}",
         name=probe.name,
         operation_id=f"health:{probe.name}",
-        summary=probe.summary,
+        summary=probe.endpoint_summary,
+        include_in_schema=debug,
     )
     async def handle_request() -> Response[bytes]:
         content, headers, status_code = await probe_handler()
@@ -50,7 +61,15 @@ def health(  # noqa: PLR0913
     debug: bool = False,
     prefix: str = "/health",
 ) -> Iterable[HTTPRouteHandler]:
-    """Make list of routes for healthchecks."""
+    """Make list of routes for healthchecks.
+
+    Returns:
+        Iterable[HTTPRouteHandler]: Generated healthcheck route handlers.
+
+    To close health check resources on app shutdown, pass the same probes
+    to ``healthcheck_shutdown(probes)`` and add the returned callback to
+    Litestar's ``on_shutdown`` list.
+    """
     return [
         _add_probe_route(
             probe,

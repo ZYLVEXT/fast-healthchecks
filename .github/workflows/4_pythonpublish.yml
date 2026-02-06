@@ -12,15 +12,20 @@ jobs:
       name: pypi
       url: https://pypi.org/p/fast-healthchecks
     permissions:
+      contents: read
       id-token: write
     if: github.event.repository.fork == false
     steps:
-      - uses: actions/checkout@v5.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6.7.0
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python 3.12
         run: uv python install 3.12
@@ -32,4 +37,4 @@ jobs:
         run: uv build
 
       - name: Publish package distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.13.0
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e

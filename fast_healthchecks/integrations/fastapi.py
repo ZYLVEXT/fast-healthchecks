@@ -1,11 +1,20 @@
 """FastAPI integration for health checks."""
 
-from typing import Any
+from __future__ import annotations
 
 from fastapi import APIRouter, status
 from fastapi.responses import Response
 
-from fast_healthchecks.integrations.base import HandlerType, Probe, default_handler, make_probe_asgi
+from fast_healthchecks.integrations.base import (
+    HandlerType,
+    Probe,
+    close_probes,
+    default_handler,
+    healthcheck_shutdown,
+    make_probe_asgi,
+)
+
+__all__ = ["HealthcheckRouter", "healthcheck_shutdown"]
 
 
 class HealthcheckRouter(APIRouter):
@@ -14,6 +23,10 @@ class HealthcheckRouter(APIRouter):
     Args:
         probes: An iterable of probes to run.
         debug: Whether to include the probes in the schema. Defaults to False.
+
+    To close health check resources (e.g. cached clients) on app shutdown,
+    call ``await router.close()`` from your FastAPI lifespan, or use
+    ``healthcheck_shutdown(probes)`` and call the returned callback.
     """
 
     def __init__(  # noqa: PLR0913
@@ -25,12 +38,10 @@ class HealthcheckRouter(APIRouter):
         failure_status: int = status.HTTP_503_SERVICE_UNAVAILABLE,
         debug: bool = False,
         prefix: str = "/health",
-        **kwargs: dict[str, Any],
     ) -> None:
         """Initialize the router."""
-        kwargs["prefix"] = prefix  # ty: ignore[invalid-assignment]
-        kwargs["tags"] = ["Healthchecks"]  # ty: ignore[invalid-assignment]
-        super().__init__(**kwargs)
+        super().__init__(prefix=prefix, tags=["Healthchecks"])
+        self._healthcheck_probes: list[Probe] = list(probes)
         for probe in probes:
             self._add_probe_route(
                 probe,
@@ -71,3 +82,11 @@ class HealthcheckRouter(APIRouter):
             summary=probe.endpoint_summary,
             include_in_schema=debug,
         )
+
+    async def close(self) -> None:
+        """Close resources owned by this router's health check probes.
+
+        Call this from your FastAPI lifespan shutdown (e.g. after ``yield``
+        in an ``@asynccontextmanager`` lifespan) so cached clients are closed.
+        """
+        await close_probes(self._healthcheck_probes)
