@@ -1,6 +1,6 @@
 [project]
 name = "fast-healthchecks"
-version = "0.2.4"
+version = "1.0.0"
 description = "Fast Healthchecks"
 readme = "README.md"
 license = {text = "MIT"}
