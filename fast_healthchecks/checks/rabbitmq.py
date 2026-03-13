@@ -3,6 +3,11 @@
 Classes:
     RabbitMQHealthCheck: A class to perform health checks on RabbitMQ.
 
+**Security:** When using DSN or config without a password (or with default
+credentials), the library falls back to ``user="guest"`` and ``password="guest"``.
+These defaults are for local development only; do not use them in production or
+on non-local brokers. See SECURITY.md and :class:`RabbitMQConfig` docstring.
+
 Usage:
     The RabbitMQHealthCheck class can be used to perform health checks on RabbitMQ by calling it.
 
@@ -17,36 +22,48 @@ Example:
     print(result.healthy)
 """
 
-from traceback import format_exc
-from typing import Any, TypeAlias, TypedDict, final
-from urllib.parse import ParseResult, urlparse
+from __future__ import annotations
 
-from fast_healthchecks.checks._base import DEFAULT_HC_TIMEOUT, HealthCheckDSN
-from fast_healthchecks.compat import PYDANTIC_INSTALLED
+from typing import TYPE_CHECKING, Any, final
+from urllib.parse import urlsplit
+
+from fast_healthchecks.checks._base import (
+    _CLIENT_CACHING_SLOTS,
+    DEFAULT_HC_TIMEOUT,
+    ClientCachingMixin,
+    HealthCheckDSN,
+    healthcheck_safe,
+)
+from fast_healthchecks.checks._imports import raise_optional_import_error
+from fast_healthchecks.checks.configs import RabbitMQConfig
+from fast_healthchecks.checks.dsn_parsing import RabbitMQParseDsnResult
 from fast_healthchecks.models import HealthCheckResult
 
-IMPORT_ERROR_MSG = "aio-pika is not installed. Install it with `pip install aio-pika`."
+if TYPE_CHECKING:
+    import asyncio
+    from collections.abc import Awaitable, Callable
+
+    from aio_pika.abc import AbstractRobustConnection
 
 try:
     import aio_pika
 except ImportError as exc:
-    raise ImportError(IMPORT_ERROR_MSG) from exc
-
-if PYDANTIC_INSTALLED:
-    from pydantic import AmqpDsn
-else:  # pragma: no cover
-    AmqpDsn: TypeAlias = str
+    raise_optional_import_error("aio-pika", "aio-pika", exc)
 
 
-class ParseDSNResult(TypedDict, total=True):
-    """A dictionary containing the results of parsing a DSN."""
-
-    parse_result: ParseResult
+def _close_rabbitmq_client(client: AbstractRobustConnection) -> Awaitable[None]:
+    return client.close()
 
 
 @final
-class RabbitMQHealthCheck(HealthCheckDSN[HealthCheckResult]):
+class RabbitMQHealthCheck(
+    ClientCachingMixin["AbstractRobustConnection"],
+    HealthCheckDSN[HealthCheckResult, RabbitMQParseDsnResult],
+):
     """A class to perform health checks on RabbitMQ.
+
+    Uses ClientCachingMixin to reuse a single connection instead of opening
+    a new one on every check.
 
     Attributes:
         _host: The RabbitMQ host.
@@ -59,85 +76,80 @@ class RabbitMQHealthCheck(HealthCheckDSN[HealthCheckResult]):
         _vhost: The RabbitMQ virtual host.
     """
 
-    __slots__ = ("_host", "_name", "_password", "_port", "_secure", "_timeout", "_user", "_vhost")
+    __slots__ = (*_CLIENT_CACHING_SLOTS, "_config", "_name")
 
-    _host: str
-    _port: int
-    _secure: bool
-    _user: str
-    _vhost: str
-    _password: str
-    _timeout: float
+    _config: RabbitMQConfig
     _name: str
+    _client: AbstractRobustConnection | None
+    _client_loop: asyncio.AbstractEventLoop | None
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         *,
-        host: str,
-        user: str,
-        password: str,
-        port: int = 5672,
-        vhost: str = "/",
-        secure: bool = False,
-        timeout: float = DEFAULT_HC_TIMEOUT,
+        config: RabbitMQConfig | None = None,
         name: str = "RabbitMQ",
+        close_client_fn: Callable[[AbstractRobustConnection], Awaitable[None]] = _close_rabbitmq_client,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
-        """Initializes the RabbitMQHealthCheck class.
+        """Initialize the RabbitMQHealthCheck.
 
         Args:
-            host: The RabbitMQ host
-            user: The RabbitMQ user
-            password: The RabbitMQ password
-            port: The RabbitMQ port
-            vhost: The RabbitMQ virtual host
-            secure: Whether to use a secure connection
-            timeout: The timeout for the health check
-            name: The name of the health check
+            config: Connection config. If None, built from kwargs (host, user, password, etc.).
+            name: The name of the health check.
+            close_client_fn: Callable to close the cached connection.
+            **kwargs: Passed to RabbitMQConfig when config is None.
         """
-        self._host = host
-        self._user = user
-        self._password = password
-        self._port = port
-        self._vhost = vhost
-        self._secure = secure
-        self._timeout = timeout
+        if config is None:
+            config = RabbitMQConfig(**kwargs)
+        self._config = config
         self._name = name
+        super().__init__(close_client_fn=close_client_fn)
+
+    def _create_client(self) -> Awaitable[AbstractRobustConnection]:
+        c = self._config
+        return aio_pika.connect_robust(
+            host=c.host,
+            port=c.port,
+            login=c.user,
+            password=c.password,
+            ssl=c.secure,
+            virtualhost=c.vhost,
+            timeout=c.timeout,
+        )
 
     @classmethod
-    def parse_dsn(cls, dsn: str) -> ParseDSNResult:
+    def _allowed_schemes(cls) -> tuple[str, ...]:
+        return ("amqp", "amqps")
+
+    @classmethod
+    def _default_name(cls) -> str:
+        return "RabbitMQ"
+
+    @classmethod
+    def parse_dsn(cls, dsn: str) -> RabbitMQParseDsnResult:
         """Parse the DSN and return the results.
 
         Args:
-            dsn (str): The DSN to parse.
+            dsn: The DSN to parse.
 
         Returns:
-            ParseDSNResult: The results of parsing the DSN.
+            RabbitMQParseDsnResult: The results of parsing the DSN.
         """
-        parse_result: ParseResult = urlparse(dsn)
+        parse_result = urlsplit(dsn)
         return {"parse_result": parse_result}
 
     @classmethod
-    def from_dsn(
+    def _from_parsed_dsn(
         cls,
-        dsn: "AmqpDsn | str",
+        parsed: RabbitMQParseDsnResult,
         *,
         name: str = "RabbitMQ",
         timeout: float = DEFAULT_HC_TIMEOUT,
-    ) -> "RabbitMQHealthCheck":
-        """Creates a RabbitMQHealthCheck instance from a DSN.
-
-        Args:
-            dsn: The DSN to create the RabbitMQHealthCheck instance from.
-            name: The name of the health check.
-            timeout: The timeout for the health check.
-
-        Returns:
-            A RabbitMQHealthCheck instance.
-        """
-        dsn = cls.validate_dsn(dsn, type_=AmqpDsn)
-        parsed_dsn = cls.parse_dsn(dsn)
-        parse_result = parsed_dsn["parse_result"]
-        return RabbitMQHealthCheck(
+        **_kwargs: object,
+    ) -> RabbitMQHealthCheck:
+        parse_result = parsed["parse_result"]
+        # Default "guest"/"guest" is development-only; see SECURITY.md and RabbitMQConfig.
+        config = RabbitMQConfig(
             host=parse_result.hostname or "localhost",
             user=parse_result.username or "guest",
             password=parse_result.password or "guest",
@@ -145,42 +157,18 @@ class RabbitMQHealthCheck(HealthCheckDSN[HealthCheckResult]):
             vhost=parse_result.path.lstrip("/") or "/",
             secure=parse_result.scheme == "amqps",
             timeout=timeout,
-            name=name,
         )
+        return cls(config=config, name=name)
 
+    @healthcheck_safe(invalidate_on_error=True)
     async def __call__(self) -> HealthCheckResult:
-        """Performs the health check on RabbitMQ.
+        """Perform the health check on RabbitMQ.
+
+        ClientCachingMixin handles connection persistence; _ensure_client
+        validates the connection via aio-pika's robust logic.
 
         Returns:
-            A HealthCheckResult object.
+            HealthCheckResult: The result of the health check.
         """
-        try:
-            async with await aio_pika.connect_robust(
-                host=self._host,
-                port=self._port,
-                login=self._user,
-                password=self._password,
-                ssl=self._secure,
-                virtualhost=self._vhost,
-                timeout=self._timeout,
-            ):
-                return HealthCheckResult(name=self._name, healthy=True)
-        except BaseException:  # noqa: BLE001
-            return HealthCheckResult(name=self._name, healthy=False, error_details=format_exc())
-
-    def to_dict(self) -> dict[str, Any]:
-        """Converts the RabbitMQHealthCheck object to a dictionary.
-
-        Returns:
-            A dictionary with the RabbitMQHealthCheck attributes.
-        """
-        return {
-            "host": self._host,
-            "user": self._user,
-            "password": self._password,
-            "port": self._port,
-            "vhost": self._vhost,
-            "secure": self._secure,
-            "timeout": self._timeout,
-            "name": self._name,
-        }
+        _ = await self._ensure_client()
+        return HealthCheckResult(name=self._name, healthy=True)

@@ -1,6 +1,11 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
+#
+# Run the same command locally and on CI (see .github/workflows/1_test.yml):
+#   uv run --no-sync pre-commit run --show-diff-on-failure --color=always --all-files
+#
 exclude: ^(uv.lock|.vscode/)
+default_install_hook_types: [pre-commit, commit-msg]
 default_language_version:
   python: python3.10
 
@@ -8,39 +13,48 @@ repos:
 
   - repo: local
     hooks:
-    -   id: forbidden-files
-        name: forbidden files
-        entry: found Copier update rejection files; review them and remove them
-        language: fail
-        files: "\\.rej$"
-    -   id: ruff-format
-        name: "ruff format"
-        entry: ruff format --force-exclude
-        args: ["--preview"]
-        types_or: [python, pyi]
-        language: python
     -   id: ruff-lint
         name: "ruff lint"
-        entry: ruff check --force-exclude
+        entry: uv run ruff check --force-exclude
         args: ["--fix", "--exit-non-zero-on-fix", "--preview"]
         types_or: [python, pyi]
-        language: python
+        language: system
+    -   id: ruff-format
+        name: "ruff format"
+        entry: uv run ruff format --force-exclude
+        args: ["--preview"]
+        types_or: [python, pyi]
+        language: system
     -   id: ty-check
         name: ty-check
+        entry: uv run ty check
         types_or: [python, pyi]
-        language: python
-        entry: ty check
+        language: system
         pass_filenames: false
-        args: [--python=.venv/]
-        additional_dependencies: [ty]
+    -   id: deptry
+        name: deptry
+        entry: uv run deptry .
+        language: system
+        pass_filenames: false
+    -   id: pip-audit
+        name: pip-audit
+        entry: uv run pip-audit
+        language: system
+        pass_filenames: false
+    -   id: commitizen
+        name: commitizen check
+        entry: uv run cz check --allow-abort --commit-msg-file
+        language: system
+        stages: [commit-msg]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
       - id: check-added-large-files
       - id: check-ast
       - id: check-builtin-literals
       - id: check-case-conflict
+      - id: check-illegal-windows-names
       - id: check-docstring-first
       - id: check-executables-have-shebangs
       - id: check-json
@@ -53,16 +67,13 @@ repos:
       - id: check-xml
       - id: check-yaml
         args: [--allow-multiple-documents, --unsafe]
-        exclude: "(?x)^(
-          mkdocs.yml
-        )$"
       - id: debug-statements
       - id: destroyed-symlinks
       - id: detect-aws-credentials
       - id: detect-private-key
         exclude: "(?x)^(
-          certs/key.key|
-          certs/ca.key
+          tests/certs/key.key|
+          tests/certs/ca.key
         )$"
       - id: end-of-file-fixer
       - id: file-contents-sorter
@@ -72,7 +83,9 @@ repos:
       - id: name-tests-test
         args: ['--pytest-test-first']
         exclude: "(?x)^(
-          tests/utils.py
+          tests/utils.py|
+          tests/unit/integrations/helpers.py|
+          tests/integration/checks/httpbin_like_app.py
         )$"
       - id: no-commit-to-branch
         args: [--branch, main]
@@ -82,22 +95,13 @@ repos:
           - "--indent=4"
           - "--no-sort-keys"
       - id: requirements-txt-fixer
+        exclude: ^requirements\.txt$
       - id: sort-simple-yaml
       - id: trailing-whitespace
 
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.20.0
-    hooks:
-    -   id: pyupgrade
-
-  - repo: https://github.com/fpgmaas/deptry.git
-    rev: 0.23.1
-    hooks:
-      - id: deptry
-
   - repo: https://github.com/astral-sh/uv-pre-commit
     # uv version.
-    rev: 0.8.18
+    rev: a1a56a60ddf7e9ba639fdd9f00f852d63ede4c04  # frozen: 0.10.10
     hooks:
       # Update the uv lockfile
       - id: uv-lock

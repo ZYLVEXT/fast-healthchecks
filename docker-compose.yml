@@ -3,22 +3,39 @@ services:
   postgres:
     container_name: dev_fast_healthchecks_postgres
     image: postgres:17-alpine
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     ports: ['${POSTGRES_PORT}:5432']
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DATABASE}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
 
   redis:
     container_name: dev_fast_healthchecks_redis
     image: redis:8-alpine
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     restart: on-failure
     ports: ['6379:6379']
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 3s
 
   rabbitmq:
     container_name: dev_fast_healthchecks_rabbitmq
     image: rabbitmq:4-alpine
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     restart: always
     ports:
       - '${RABBITMQ_PORT}:5672'
@@ -26,23 +43,39 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
 
   zookeeper:
     container_name: dev_fast_healthchecks_zookeeper
     image: confluentinc/cp-zookeeper:7.9.2
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     hostname: zookeeper
     ports:
       - "2181:2181"
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      # Confluent image only enables "srvr" four-letter word, not "ruok"
+      test: ['CMD-SHELL', 'echo srvr | nc -w 2 localhost 2181 | grep -q Mode']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   kafka1:
     container_name: dev_fast_healthchecks_kafka1
     image: confluentinc/cp-kafka:7.9.2
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     hostname: kafka1
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     ports:
       - "9094:9094"
     environment:
@@ -51,13 +84,21 @@ services:
       KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:9092,OUTSIDE://localhost:9094
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,OUTSIDE:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+    healthcheck:
+      test: ['CMD-SHELL', 'kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1']
+      interval: 5s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
 
   kafka2:
     container_name: dev_fast_healthchecks_kafka2
     image: confluentinc/cp-kafka:7.9.2
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     hostname: kafka2
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     ports:
       - "9095:9095"
     environment:
@@ -66,10 +107,17 @@ services:
       KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka2:9093,OUTSIDE://localhost:9095
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,OUTSIDE:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+    healthcheck:
+      test: ['CMD-SHELL', 'kafka-broker-api-versions --bootstrap-server localhost:9093 || exit 1']
+      interval: 5s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
 
   mongo:
     container_name: dev_fast_healthchecks_mongo
-    image: mongo
+    image: mongo:8
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     restart: always
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
@@ -77,10 +125,17 @@ services:
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
     ports:
       - "${MONGO_PORT}:27017"
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
 
   opensearch:
     container_name: dev_fast_healthchecks_opensearch
     image: opensearchproject/opensearch
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     environment:
       - discovery.type=single-node # Single node discovery
       - bootstrap.memory_lock=true # Disable JVM heap memory swapping
@@ -97,3 +152,9 @@ services:
     ports:
       - 9200:9200 # REST API
       - 9600:9600 # Performance Analyzer
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -sf http://localhost:9200/_cluster/health || exit 1']
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 40s

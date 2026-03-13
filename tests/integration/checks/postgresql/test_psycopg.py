@@ -1,21 +1,40 @@
+"""Integration tests for PostgreSQLPsycopgHealthCheck against real PostgreSQL."""
+
 import pytest
 
+from fast_healthchecks.checks.dsn_parsing import SslMode
 from fast_healthchecks.checks.postgresql.psycopg import PostgreSQLPsycopgHealthCheck
 from fast_healthchecks.models import HealthCheckResult
 from tests.integration.checks.postgresql.conftest import BasePostgreSQLConfig
+from tests.integration.test_assertions import (
+    CONNECTION_REFUSED_FRAGMENTS,
+    DNS_ERROR_FRAGMENTS,
+    assert_error_contains_any,
+)
 
 pytestmark = pytest.mark.integration
 
 
 class PsycopgConfig(BasePostgreSQLConfig, total=True):
-    sslmode: str | None
+    """Psycopg-specific config with sslmode and sslrootcert."""
+
+    sslmode: SslMode | None
     sslrootcert: str | None
 
 
 @pytest.fixture(scope="session", name="psycopg_config")
 def fixture_psycopg_config(base_postgresql_config: BasePostgreSQLConfig) -> PsycopgConfig:
+    """Build PsycopgConfig from base config.
+
+    Returns:
+        PsycopgConfig for integration tests.
+    """
     return {
-        **base_postgresql_config,
+        "host": base_postgresql_config["host"],
+        "port": base_postgresql_config["port"],
+        "user": base_postgresql_config["user"],
+        "password": base_postgresql_config["password"],
+        "database": base_postgresql_config["database"],
         "sslmode": None,
         "sslrootcert": None,
     }
@@ -23,32 +42,49 @@ def fixture_psycopg_config(base_postgresql_config: BasePostgreSQLConfig) -> Psyc
 
 @pytest.mark.asyncio
 async def test_postgresql_psycopg_check_success(psycopg_config: PsycopgConfig) -> None:
-    check = PostgreSQLPsycopgHealthCheck(**psycopg_config)  # ty: ignore[missing-argument]
+    """Psycopg check returns healthy against real PostgreSQL."""
+    check = PostgreSQLPsycopgHealthCheck(
+        host=psycopg_config["host"],
+        port=psycopg_config["port"],
+        user=psycopg_config["user"],
+        password=psycopg_config["password"],
+        database=psycopg_config["database"],
+        sslmode=psycopg_config["sslmode"],
+        sslrootcert=psycopg_config["sslrootcert"],
+    )
     result = await check()
     assert result == HealthCheckResult(name="PostgreSQL", healthy=True, error_details=None)
 
 
 @pytest.mark.asyncio
 async def test_postgresql_psycopg_check_failure(psycopg_config: PsycopgConfig) -> None:
-    config = {
-        **psycopg_config,
-        "host": "localhost2",
-    }
-    check = PostgreSQLPsycopgHealthCheck(**config)  # ty: ignore[missing-argument]
+    """Psycopg check returns unhealthy when DB is unreachable (wrong port)."""
+    check = PostgreSQLPsycopgHealthCheck(
+        host="localhost2",
+        port=psycopg_config["port"],
+        user=psycopg_config["user"],
+        password=psycopg_config["password"],
+        database=psycopg_config["database"],
+        sslmode=psycopg_config["sslmode"],
+        sslrootcert=psycopg_config["sslrootcert"],
+    )
     result = await check()
     assert result.healthy is False
-    assert result.error_details is not None
-    assert "nodename nor servname provided, or not known" in result.error_details
+    assert_error_contains_any(result.error_details, DNS_ERROR_FRAGMENTS)
 
 
 @pytest.mark.asyncio
 async def test_postgresql_psycopg_check_connection_error(psycopg_config: PsycopgConfig) -> None:
-    config = {
-        **psycopg_config,
-        "port": 6432,
-    }
-    check = PostgreSQLPsycopgHealthCheck(**config)  # ty: ignore[missing-argument]
+    """Psycopg check returns unhealthy with error_details on connection error."""
+    check = PostgreSQLPsycopgHealthCheck(
+        host=psycopg_config["host"],
+        port=6432,
+        user=psycopg_config["user"],
+        password=psycopg_config["password"],
+        database=psycopg_config["database"],
+        sslmode=psycopg_config["sslmode"],
+        sslrootcert=psycopg_config["sslrootcert"],
+    )
     result = await check()
     assert result.healthy is False
-    assert result.error_details is not None
-    assert "connection failed" in result.error_details
+    assert_error_contains_any(result.error_details, CONNECTION_REFUSED_FRAGMENTS)

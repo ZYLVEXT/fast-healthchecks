@@ -1,0 +1,193 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
+
+jobs:
+  check-tag:
+    name: Verify release trigger
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    if: github.event.repository.fork == false && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    permissions:
+      contents: read
+    outputs:
+      is_tag: ${{ steps.tag.outputs.is_tag }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - name: Verify HEAD is tagged
+        id: tag
+        run: |
+          T=$(git describe --tags --exact-match HEAD 2>/dev/null) || true
+          if [ -n "$T" ]; then echo "is_tag=true" >> $GITHUB_OUTPUT; echo "tag=$T" >> $GITHUB_OUTPUT; else echo "is_tag=false" >> $GITHUB_OUTPUT; echo "tag=" >> $GITHUB_OUTPUT; fi
+
+  reproducible-build:
+    name: Reproducible build verification
+    needs: [check-tag]
+    timeout-minutes: 5
+    if: needs.check-tag.outputs.is_tag == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7.3.1
+        with:
+          enable-cache: true
+          cache-python: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: First build (from lockfile)
+        env:
+          SOURCE_DATE_EPOCH: "0"
+        run: |
+          uv sync --frozen --group=dev --all-extras
+          uv build
+          mkdir -p dist1 && cp dist/*.whl dist/*.tar.gz dist1/
+
+      - name: Second build (same environment)
+        env:
+          SOURCE_DATE_EPOCH: "0"
+        run: |
+          rm -rf dist build src/*.egg-info *.egg-info 2>/dev/null || true
+          uv sync --frozen --group=dev --all-extras
+          uv build
+          mkdir -p dist2 && cp dist/*.whl dist/*.tar.gz dist2/
+
+      # Only assert reproducibility for wheels; sdist (tar.gz) often has non-determinism
+      # (gzip mtime, setuptools metadata). We still build and publish sdist.
+      - name: Compare wheel hashes
+        run: |
+          for f in dist1/*.whl; do
+            name=$(basename "$f")
+            h1=$(sha256sum "dist1/$name" | cut -d' ' -f1)
+            h2=$(sha256sum "dist2/$name" | cut -d' ' -f1)
+            if [ "$h1" != "$h2" ]; then
+              echo "Hash mismatch for $name"
+              exit 1
+            fi
+            echo "OK $name"
+          done
+          echo "Reproducible: wheel hashes match (same runner, Python 3.14, lockfile, SOURCE_DATE_EPOCH=0)."
+
+      - name: Upload verified dist
+        run: mkdir -p dist && cp dist1/* dist/
+      - name: Upload dist
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: dist
+          path: dist/
+
+  release-assets:
+    name: Attach dist to GitHub Release
+    needs: [check-tag, reproducible-build]
+    if: needs.check-tag.outputs.is_tag == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3  # v8.0.0
+        with:
+          name: dist
+          path: dist
+          merge-multiple: true
+      - name: Attach wheel and sdist to Release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b  # v2.5.0
+        with:
+          tag_name: ${{ needs.check-tag.outputs.tag }}
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Python: publish only to PyPI. GitHub Packages does not support an official PyPI
+  # registry (see https://docs.github.com/en/packages/working-with-a-github-packages-registry).
+  pypi:
+    name: Publish to PyPI
+    needs: [check-tag, reproducible-build]
+    timeout-minutes: 5
+    if: needs.check-tag.outputs.is_tag == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/fast-healthchecks
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3  # v8.0.0
+        with:
+          name: dist
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # v1.13.0
+
+  docs:
+    name: Deploy documentation
+    needs: [check-tag]
+    if: needs.check-tag.outputs.is_tag == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Configure Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b  # v5.0.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7.3.1
+        with:
+          enable-cache: true
+          cache-python: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Install docs dependencies
+        run: uv sync --group=docs
+
+      - name: Build documentation
+        run: uv run zensical build --clean
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4.0.0
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e  # v4.0.5
+        id: deployment

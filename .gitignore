@@ -135,8 +135,9 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
-# mkdocs documentation
+# zensical documentation
 /site
+docs/_include/
 
 # mypy
 .mypy_cache/
@@ -176,3 +177,4 @@ report.xml
 
 .copier-answers.yml
 .gitlab-ci.yml
+.env

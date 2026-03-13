@@ -1,0 +1,11 @@
+include README.md pyproject.toml
+recursive-include fast_healthchecks *.py py.typed
+prune tests
+prune docs
+prune examples
+prune scripts
+prune .github
+prune .vscode
+prune .scannerwork
+global-exclude zensical.toml docker-compose.yml docker-compose*.yml
+global-exclude uv.lock .pre-commit-config.yaml

@@ -1,0 +1,74 @@
+# Rollback: delete the GitHub release (if any) and tag, then force-push the default
+# branch to the commit before the tag. Handles edge case where tag exists but
+# release was never created (e.g. bump failed after push, before Create release).
+# Prompts to yank on PyPI manually.
+#
+# PAT requirement: force-push may change .github/workflows/*; GitHub requires the
+# token to have Workflows permission (Fine-grained: Workflows = Read and write;
+# Classic: scope "workflow").
+name: Rollback release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to rollback (e.g. 1.0.0); branch will be reset to commit before this tag"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: none
+
+concurrency:
+  group: release-operations
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Rollback release and bump commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          token: "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
+          fetch-depth: 0
+
+      - name: Validate tag and get parent commit
+        id: validate
+        run: |
+          set -e
+          TAG="${{ inputs.tag }}"
+          if ! git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG does not exist."
+            exit 1
+          fi
+          TAG_SHA=$(git rev-parse "refs/tags/$TAG")
+          PARENT_SHA=$(git rev-parse "$TAG_SHA^")
+          echo "parent_sha=$PARENT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Yank on PyPI (manual)
+        run: |
+          echo "::notice title=PyPI Yank::Yank release ${{ inputs.tag }} manually: https://pypi.org/manage/project/fast-healthchecks/releases/"
+          echo "PyPI does not provide a public API for yanking; use the link above, find version ${{ inputs.tag }}, and click Yank."
+
+      - name: Delete GitHub release and tag
+        run: |
+          TAG="${{ inputs.tag }}"
+          if ! gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null; then
+            git push origin --delete "$TAG" || true
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Reset branch and force-push
+        run: |
+          set -e
+          BRANCH="${{ github.event.repository.default_branch }}"
+          PARENT_SHA="${{ steps.validate.outputs.parent_sha }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git reset --hard "$PARENT_SHA"
+          git push --force origin "HEAD:$BRANCH"

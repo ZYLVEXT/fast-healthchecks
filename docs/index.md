@@ -1,69 +1,24 @@
-<h1 align="center" style="vertical-align: middle;">
-  <img src="./img/black.svg" width="30"> <strong>FastHealthcheck</strong>
-</h1>
+# Fast Healthchecks
 
-<b>Framework agnostic health checks with integrations for most popular ASGI frameworks: [FastAPI](https://github.com/fastapi/fastapi) / [Faststream](https://github.com/airtai/faststream) / [Litestar](https://github.com/litestar-org/litestar) to help you to implement the [Health Check API](https://microservices.io/patterns/observability/health-check-api.html) pattern</b>
+Framework-agnostic health checks with integrations for the most popular ASGI frameworks: [FastAPI](https://github.com/fastapi/fastapi) / [FastStream](https://github.com/airtai/faststream) / [Litestar](https://github.com/litestar-org/litestar) to help you implement the [Health Check API](https://microservices.io/patterns/observability/health-check-api.html) pattern.
 
----
+## Documentation
 
-## Installation
+- [Installation](installation.md) — install with pip, poetry, or uv; optional extras.
+- [Usage](usage.md) — mount health checks per framework; examples (FastAPI, FastStream, Litestar).
+- [Lifecycle and shutdown](lifecycle.md) — closing cached clients on app shutdown; [ProbeRunner](lifecycle.md#probe-runner-advanced) for advanced control.
+- [Probe options](probe-options.md) — probe parameters and `build_probe_route_options`.
+- [Running probes without ASGI](run-probe.md) — `run_probe` for CLI, cron, tests.
+- [Configuration objects](configuration.md) — `config` argument and types in `fast_healthchecks.checks.configs`.
+- [URL check and SSRF protection](ssrf.md) — `block_private_hosts` for `UrlHealthCheck`.
+- [DSN formats](dsn-formats.md) — URL schemes for `from_dsn()`; PostgreSQL TLS certificate rotation.
 
-With `pip`:
-```bash
-pip install fast-healthchecks
-```
+For API reference (configs, check classes, public API boundary), see [API Reference](api.md).
 
-With `poetry`:
-```bash
-poetry add fast-healthchecks
-```
+## Additional Resources
 
-With `uv`:
-```bash
-uv add fast-healthchecks
-```
-
-## Usage
-
-The easier way to use this package is to use the **`health`** function.
-
-Create the health check endpoint dynamically using different conditions.
-Each condition is a callable, and you can even have dependencies inside of it:
-
-=== "examples/probes.py"
-
-    ```python
-    {%
-        include-markdown "../examples/probes.py"
-    %}
-    ```
-
-=== "FastAPI"
-
-    ```python
-    {%
-        include-markdown "../examples/fastapi_example/main.py"
-    %}
-    ```
-
-=== "Faststream"
-
-    ```python
-    {%
-        include-markdown "../examples/faststream_example/main.py"
-    %}
-    ```
-
-=== "Litestar"
-
-    ```python
-    {%
-        include-markdown "../examples/litestar_example/main.py"
-    %}
-    ```
-
-You can find examples for each framework here:
-
-- [FastAPI example](./examples/fastapi_example)
-- [Faststream example](./examples/faststream_example)
-- [Litestar example](./examples/litestar_example)
+- [Changelog](changelog.md) — release history and changes.
+- [Style guide](style-guide.md) — code style conventions.
+- [Contributing](contributing.md) — how to contribute to the project.
+- [Security](security.md) — security policy and guidelines.
+- [Decisions](decisions/README.md) — architectural decision records.

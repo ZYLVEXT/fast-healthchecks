@@ -17,33 +17,47 @@ Example:
 
 from __future__ import annotations
 
-from traceback import format_exc
-from typing import TYPE_CHECKING, Any, TypedDict, final
+import asyncio
+from typing import TYPE_CHECKING, Any, final
+from urllib.parse import urlsplit
 
-from fast_healthchecks.checks._base import DEFAULT_HC_TIMEOUT, HealthCheckDSN
-from fast_healthchecks.compat import RedisDsn
+from fast_healthchecks.checks._base import (
+    _CLIENT_CACHING_SLOTS,
+    DEFAULT_HC_TIMEOUT,
+    ClientCachingMixin,
+    HealthCheckDSN,
+    healthcheck_safe,
+    result_unhealthy_dependency,
+)
+from fast_healthchecks.checks._imports import raise_optional_import_error
+from fast_healthchecks.checks.configs import RedisConfig
 from fast_healthchecks.models import HealthCheckResult
-
-IMPORT_ERROR_MSG = "redis is not installed. Install it with `pip install redis`."
 
 try:
     from redis.asyncio import Redis
     from redis.asyncio.connection import parse_url
 except ImportError as exc:
-    raise ImportError(IMPORT_ERROR_MSG) from exc
+    raise_optional_import_error("redis", "redis", exc)
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from redis.asyncio.connection import ConnectKwargs
+
+from fast_healthchecks.checks.dsn_parsing import RedisParseDsnResult
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from redis.asyncio.connection import ConnectKwargs
 
 
-class ParseDSNResult(TypedDict, total=True):
-    """A dictionary containing the results of parsing a DSN."""
-
-    parse_result: ConnectKwargs
+def _close_redis_client(client: Redis) -> Awaitable[None]:
+    return client.aclose()
 
 
 @final
-class RedisHealthCheck(HealthCheckDSN[HealthCheckResult]):
+class RedisHealthCheck(ClientCachingMixin["Redis"], HealthCheckDSN[HealthCheckResult, RedisParseDsnResult]):
     """A class to perform health checks on Redis.
 
     Attributes:
@@ -58,99 +72,87 @@ class RedisHealthCheck(HealthCheckDSN[HealthCheckResult]):
         _ssl_ca_certs: The path to the CA certificate.
     """
 
-    __slots__ = (
-        "_database",
-        "_host",
-        "_name",
-        "_password",
-        "_port",
-        "_ssl",
-        "_ssl_ca_certs",
-        "_timeout",
-        "_user",
-    )
+    __slots__ = (*_CLIENT_CACHING_SLOTS, "_config", "_name")
 
-    _host: str
-    _port: int
-    _database: str | int
-    _user: str | None
-    _password: str | None
-    _timeout: float | None
+    _config: RedisConfig
     _name: str
-    _ssl: bool
-    _ssl_ca_certs: str | None
+    _client: Redis | None
+    _client_loop: asyncio.AbstractEventLoop | None
 
-    def __init__(  # noqa: PLR0913, D417
+    def __init__(
         self,
         *,
-        host: str = "localhost",
-        port: int = 6379,
-        database: str | int = 0,
-        user: str | None = None,
-        password: str | None = None,
-        ssl: bool = False,
-        ssl_ca_certs: str | None = None,
-        timeout: float | None = DEFAULT_HC_TIMEOUT,
+        config: RedisConfig | None = None,
         name: str = "Redis",
+        close_client_fn: Callable[[Redis], Awaitable[None]] = _close_redis_client,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """Initialize the RedisHealthCheck class.
 
         Args:
-            host: The host to connect to.
-            port: The port to connect to.
-            database: The database to connect to.
-            user: The user to authenticate with.
-            password: The password to authenticate with.
-            timeout: The timeout for the connection.
+            config: Connection config. If None, built from kwargs (host, port, database, etc.).
             name: The name of the health check.
+            close_client_fn: Callable to close the cached client. Defaults to the
+                standard Redis aclose.
+            **kwargs: Passed to RedisConfig when config is None (host, port, database,
+                user, password, ssl, ssl_ca_certs, timeout).
         """
-        self._host = host
-        self._port = port
-        self._database = database
-        self._user = user
-        self._password = password
-        self._ssl = ssl
-        self._ssl_ca_certs = ssl_ca_certs
-        self._timeout = timeout
+        if config is None:
+            config = RedisConfig(**kwargs)
+        self._config = config
         self._name = name
+        super().__init__(close_client_fn=close_client_fn)
+
+    def _create_client(self) -> Redis:
+        c = self._config
+        return Redis(
+            host=c.host,
+            port=c.port,
+            db=c.database,
+            username=c.user,
+            password=c.password,
+            socket_timeout=c.timeout,
+            single_connection_client=True,
+            ssl=c.ssl,
+            ssl_ca_certs=c.ssl_ca_certs,
+        )
 
     @classmethod
-    def parse_dsn(cls, dsn: str) -> ParseDSNResult:
+    def _allowed_schemes(cls) -> tuple[str, ...]:
+        return ("redis", "rediss")
+
+    @classmethod
+    def _default_name(cls) -> str:
+        return "Redis"
+
+    @classmethod
+    def parse_dsn(cls, dsn: str) -> RedisParseDsnResult:
         """Parse the DSN and return the results.
 
         Args:
-            dsn (str): The DSN to parse.
+            dsn: The DSN to parse.
 
         Returns:
-            ParseDSNResult: The results of parsing the DSN.
+            RedisParseDsnResult: The results of parsing the DSN.
         """
         parse_result: ConnectKwargs = parse_url(str(dsn))
-        return {"parse_result": parse_result}
+        scheme = urlsplit(dsn).scheme.lower()
+        return {"parse_result": parse_result, "scheme": scheme}
 
     @classmethod
-    def from_dsn(
+    def _from_parsed_dsn(
         cls,
-        dsn: RedisDsn | str,
+        parsed: RedisParseDsnResult,
         *,
         name: str = "Redis",
         timeout: float = DEFAULT_HC_TIMEOUT,
+        **_kwargs: object,
     ) -> RedisHealthCheck:
-        """Create a RedisHealthCheck instance from a DSN.
-
-        Args:
-            dsn: The DSN to connect to.
-            name: The name of the health check.
-            timeout: The timeout for the connection.
-
-        Returns:
-            A RedisHealthCheck instance.
-        """
-        dsn = cls.validate_dsn(dsn, type_=RedisDsn)
-        parsed_dsn = cls.parse_dsn(dsn)
-        parse_result = parsed_dsn["parse_result"]
-        ssl_ca_certs: str | None = parse_result.get("ssl_ca_certs", None)
-        ssl = "ssl_ca_certs" in parse_result and bool(ssl_ca_certs)
-        return RedisHealthCheck(
+        parse_result = parsed["parse_result"]
+        scheme = parsed.get("scheme", "")
+        ssl_ca_certs: str | None = parse_result.get("ssl_ca_certs")
+        ssl = parse_result.get("ssl", False) or bool(ssl_ca_certs) or (scheme == "rediss")
+        config = RedisConfig(
             host=parse_result.get("host", "localhost"),
             port=parse_result.get("port", 6379),
             database=parse_result.get("db", 0),
@@ -159,46 +161,19 @@ class RedisHealthCheck(HealthCheckDSN[HealthCheckResult]):
             ssl=ssl,
             ssl_ca_certs=ssl_ca_certs,
             timeout=timeout,
-            name=name,
         )
+        return cls(config=config, name=name)
 
+    @healthcheck_safe(invalidate_on_error=True)
     async def __call__(self) -> HealthCheckResult:
         """Perform a health check on Redis.
 
         Returns:
-            A HealthCheckResult instance.
+            HealthCheckResult: The result of the health check.
         """
-        try:
-            async with Redis(
-                host=self._host,
-                port=self._port,
-                db=self._database,
-                username=self._user,
-                password=self._password,
-                socket_timeout=self._timeout,
-                single_connection_client=True,
-                ssl=self._ssl,
-                ssl_ca_certs=self._ssl_ca_certs,
-            ) as redis:
-                healthy: bool = await redis.ping()
-                return HealthCheckResult(name=self._name, healthy=healthy)
-        except BaseException:  # noqa: BLE001
-            return HealthCheckResult(name=self._name, healthy=False, error_details=format_exc())
-
-    def to_dict(self) -> dict[str, Any]:
-        """Converts the RedisHealthCheck object to a dictionary.
-
-        Returns:
-            A dictionary with the RedisHealthCheck attributes.
-        """
-        return {
-            "host": self._host,
-            "port": self._port,
-            "database": self._database,
-            "user": self._user,
-            "password": self._password,
-            "ssl": self._ssl,
-            "ssl_ca_certs": self._ssl_ca_certs,
-            "timeout": self._timeout,
-            "name": self._name,
-        }
+        redis = await self._ensure_client()
+        ping_result = redis.ping()
+        healthy = bool(await ping_result) if asyncio.iscoroutine(ping_result) else bool(ping_result)
+        if healthy:
+            return HealthCheckResult(name=self._name, healthy=True)
+        return result_unhealthy_dependency(name=self._name, message="Redis ping returned unhealthy status")

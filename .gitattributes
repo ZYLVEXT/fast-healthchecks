@@ -1,0 +1,3 @@
+# Ensure consistent line endings for cache key hashing (hashFiles) across Windows and Linux runners.
+docker-compose.yml text eol=lf
+.env.example text eol=lf

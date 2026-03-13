@@ -2,28 +2,103 @@ name: Bump version
 
 on:
   workflow_dispatch:
+    inputs:
+      increment:
+        description: "Version increment type"
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - "PATCH"
+          - "MINOR"
+          - "MAJOR"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-operations
+  cancel-in-progress: false
 
 jobs:
-  bump-version:
-    if: "!startsWith(github.event.head_commit.message, 'bump:')"
+  bump:
+    name: Bump version and release
+    if: "github.event.head_commit == null || !startsWith(github.event.head_commit.message, 'bump:')"
     runs-on: ubuntu-latest
-    name: "Bump version and create changelog with commitizen"
+    timeout-minutes: 5
     steps:
-      - name: Check out
-        uses: actions/checkout@v5.0.0
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           token: "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
           fetch-depth: 0
 
-      - name: Create bump and changelog
-        uses: commitizen-tools/commitizen-action@0.24.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7.3.1
+        with:
+          enable-cache: true
+          cache-python: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Install dev dependencies
+        run: uv sync --group=dev
+
+      - name: Get next version
+        id: get_version
+        run: |
+          if [ -n "${{ inputs.increment }}" ]; then
+            NEXT=$(uv run cz bump --get-next --increment "${{ inputs.increment }}")
+          else
+            NEXT=$(uv run cz bump --get-next)
+          fi
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Replace Unreleased header in CHANGELOG
+        id: unreleased
+        run: |
+          if grep -q '^## Unreleased' CHANGELOG.md; then
+            DATE=$(date -u +%Y-%m-%d)
+            sed -i.bak "s/^## Unreleased.*/## ${{ steps.get_version.outputs.version }} ($DATE)/" CHANGELOG.md
+            rm -f CHANGELOG.md.bak
+            echo "replaced=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "replaced=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump version and changelog
+        id: bump
+        uses: commitizen-tools/commitizen-action@338bbd841b75aaee6bf5340e1fa12f6ab58ff9ff  # v0.27.1
         with:
           github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          increment: ${{ inputs.increment }}
+          changelog: ${{ steps.unreleased.outputs.replaced != 'true' }}
+          commit: ${{ steps.unreleased.outputs.replaced != 'true' }}
+          push: ${{ steps.unreleased.outputs.replaced != 'true' }}
 
-      - name: Release
-        uses: softprops/action-gh-release@v2.3.3
+      - name: Commit, tag and push (single commit when using custom changelog)
+        if: steps.unreleased.outputs.replaced == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md pyproject.toml fast_healthchecks/__init__.py
+          git commit -m "bump: version ${{ steps.bump.outputs.previous_version }} → ${{ steps.bump.outputs.version }}"
+          git tag "${{ steps.bump.outputs.version }}"
+          git push origin HEAD --tags
+
+      - name: Prepare release notes
+        id: release_notes
+        run: |
+          awk '/^## [0-9]+\.[0-9]+\.[0-9]+ / {if(d) exit; d=1; next} d && /^## / {exit} d {print}' CHANGELOG.md > release_body.md
+          echo "path=release_body.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b  # v2.5.0
         with:
-          body_path: "CHANGELOG.md"
-          tag_name: ${{ env.REVISION }}
+          tag_name: ${{ steps.bump.outputs.version }}
+          body_path: release_body.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

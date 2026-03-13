@@ -1,33 +1,15 @@
-from typing import Any, TypedDict
+"""Fixtures for PostgreSQL integration tests (configs, base URL)."""
 
-import pytest
+from typing import TypedDict
+
+# base_postgresql_config fixture is defined in tests/integration/conftest.py
 
 
 class BasePostgreSQLConfig(TypedDict, total=True):
+    """Type for base PostgreSQL config (keys match base_postgresql_config fixture)."""
+
     host: str
     port: int
     user: str | None
     password: str | None
     database: str | None
-
-
-@pytest.fixture(scope="session", name="base_postgresql_config")
-def fixture_base_postgresql_config(env_config: dict[str, Any]) -> BasePostgreSQLConfig:
-    result: BasePostgreSQLConfig = {
-        "host": "localhost",
-        "port": 5432,
-        "user": None,
-        "password": None,
-        "database": None,
-    }
-    for key in ("host", "port", "user", "password", "database"):
-        value = env_config.get(f"POSTGRES_{key.upper()}")
-        match key:
-            case "port":
-                if value is not None:
-                    result[key] = int(value)
-            case _:
-                if value is not None:
-                    result[key] = str(value)
-
-    return result
