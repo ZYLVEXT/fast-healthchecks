@@ -1,9 +1,12 @@
+"""Unit tests for RabbitMQHealthCheck."""
+
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from fast_healthchecks.checks.rabbitmq import RabbitMQHealthCheck
+from tests.utils import assert_check_init
 
 pytestmark = pytest.mark.unit
 
@@ -13,23 +16,50 @@ pytestmark = pytest.mark.unit
     [
         (
             {},
-            "missing 3 required keyword-only arguments: 'host', 'user', and 'password'",
-            TypeError,
+            {
+                "host": "localhost",
+                "port": 5672,
+                "user": "guest",
+                "password": "guest",
+                "vhost": "/",
+                "secure": False,
+                "timeout": 5.0,
+                "name": "RabbitMQ",
+            },
+            None,
         ),
         (
             {
                 "host": "localhost",
             },
-            "missing 2 required keyword-only arguments: 'user' and 'password'",
-            TypeError,
+            {
+                "host": "localhost",
+                "port": 5672,
+                "user": "guest",
+                "password": "guest",
+                "vhost": "/",
+                "secure": False,
+                "timeout": 5.0,
+                "name": "RabbitMQ",
+            },
+            None,
         ),
         (
             {
                 "host": "localhost",
                 "user": "user",
             },
-            "missing 1 required keyword-only argument: 'password'",
-            TypeError,
+            {
+                "host": "localhost",
+                "port": 5672,
+                "user": "user",
+                "password": "guest",
+                "vhost": "/",
+                "secure": False,
+                "timeout": 5.0,
+                "name": "RabbitMQ",
+            },
+            None,
         ),
         (
             {
@@ -157,12 +187,8 @@ pytestmark = pytest.mark.unit
     ],
 )
 def test_init(params: dict[str, Any], expected: dict[str, Any], exception: type[BaseException] | None) -> None:
-    if exception is not None:
-        with pytest.raises(exception, match=str(expected)):
-            RabbitMQHealthCheck(**params)  # ty: ignore[missing-argument]
-    else:
-        obj = RabbitMQHealthCheck(**params)  # ty: ignore[missing-argument]
-        assert obj.to_dict() == expected
+    """RabbitMQHealthCheck.__init__ and to_dict match expected or raise."""
+    assert_check_init(lambda: RabbitMQHealthCheck(**params), expected, exception)
 
 
 @pytest.mark.parametrize(
@@ -277,16 +303,13 @@ def test_from_dsn(
     expected: dict[str, Any] | str,
     exception: type[BaseException] | None,
 ) -> None:
-    if exception is not None and isinstance(expected, str):
-        with pytest.raises(exception, match=expected):
-            RabbitMQHealthCheck.from_dsn(*args, **kwargs)
-    else:
-        obj = RabbitMQHealthCheck.from_dsn(*args, **kwargs)
-        assert obj.to_dict() == expected
+    """Test from_dsn with various DSN options."""
+    assert_check_init(lambda: RabbitMQHealthCheck.from_dsn(*args, **kwargs), expected, exception)
 
 
 @pytest.mark.asyncio
 async def test_call_success() -> None:
+    """Check returns healthy when connection and channel open succeed."""
     health_check = RabbitMQHealthCheck(
         host="localhost2",
         user="user",
@@ -323,6 +346,7 @@ async def test_call_success() -> None:
 
 @pytest.mark.asyncio
 async def test_call_failure() -> None:
+    """Check returns unhealthy when connection fails."""
     health_check = RabbitMQHealthCheck(
         host="localhost",
         user="user",
@@ -333,7 +357,8 @@ async def test_call_failure() -> None:
         result = await health_check()
         assert result.healthy is False
         assert result.name == "RabbitMQ"
-        assert "Connection failed" in str(result.error_details)
+        assert result.error is not None
+        assert "Connection failed" in result.error.message
         mock_connect.assert_called_once_with(
             host="localhost",
             port=5672,
@@ -352,3 +377,35 @@ async def test_call_failure() -> None:
             virtualhost="/",
             timeout=5.0,
         )
+
+
+@pytest.mark.asyncio
+async def test_aclose_clears_client() -> None:
+    """aclose() closes and clears cached client (covers _close_rabbitmq_client)."""
+    health_check = RabbitMQHealthCheck(
+        host="localhost",
+        user="user",
+        password="password",
+    )
+    with patch("aio_pika.connect_robust", new_callable=AsyncMock) as mock_connect:
+        mock_conn = AsyncMock()
+        mock_conn.close = AsyncMock()
+        mock_connect.return_value = mock_conn
+        await health_check()
+        assert health_check._client is not None
+        await health_check.aclose()
+        assert health_check._client is None
+        assert health_check._client_loop is None
+        mock_conn.close.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_aclose_idempotent_when_no_client() -> None:
+    """aclose() when no client is safe and idempotent."""
+    health_check = RabbitMQHealthCheck(
+        host="localhost",
+        user="user",
+        password="password",
+    )
+    await health_check.aclose()
+    assert health_check._client is None

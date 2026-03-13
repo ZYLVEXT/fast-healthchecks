@@ -1,9 +1,9 @@
 [project]
 name = "fast-healthchecks"
 version = "0.2.4"
-description = "FastHealthchecks"
+description = "Fast Healthchecks"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = {text = "MIT"}
 authors = [
     {name = "Vladislav Shepilov", email = "shepilov.v@protonmail.com"},
 ]
@@ -16,7 +16,7 @@ keywords = [
     "asyncpg", "psycopg", "redis", "aio-pika", "httpx", "aiokafka", "motor",
 ]
 classifiers = [
-    "Development Status :: 1 - Planning",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Libraries",
     "Programming Language :: Python :: 3 :: Only",
@@ -24,79 +24,73 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.14",
 ]
-requires-python = "<4.0.0,>=3.10.0"
+requires-python = "<3.15.0,>=3.10.0"
 dependencies = []
 
 [tool.setuptools.package-data]
 fast_healthchecks = ["py.typed"]
 
-[tool.setuptools]
-packages = [
-    "fast_healthchecks",
-    "fast_healthchecks.checks",
-    "fast_healthchecks.checks.postgresql",
-    "fast_healthchecks.integrations",
-]
+[tool.setuptools.packages]
+find = {}
 
 [project.urls]
-homepage = "https://github.com/shepilov-vladislav/fast-healthchecks"
-documentation = "https://shepilov-vladislav.github.io/fast-healthchecks/"
-source = "https://github.com/shepilov-vladislav/fast-healthchecks"
-tracker = "https://github.com/shepilov-vladislav/fast-healthchecks/issues"
+homepage = "https://github.com/ZYLVEXT/fast-healthchecks"
+documentation = "https://zylvext.github.io/fast-healthchecks/"
+source = "https://github.com/ZYLVEXT/fast-healthchecks"
+tracker = "https://github.com/ZYLVEXT/fast-healthchecks/issues"
 
 [project.optional-dependencies]
-pydantic = ["pydantic>=2.11.9,<3.0.0"]
-asyncpg = ["asyncpg>=0.30.0,<1.0.0"]
-psycopg = ["psycopg>=3.2.10,<4.0.0"]
-redis = ["redis>=6.4.0,<7.0.0"]
-aio-pika = ["aio-pika>=9.5.7,<10.0.0"]
+asyncpg = ["asyncpg>=0.31.0,<1.0.0"]
+psycopg = ["psycopg>=3.3.3,<4.0.0"]
+redis = ["redis>=7.3.0,<8.0.0"]
+aio-pika = ["aio-pika>=9.6.1,<10.0.0"]
 httpx = ["httpx>=0.28.1,<1.0.0"]
-aiokafka = ["aiokafka>=0.12.0,<1.0.0"]
+aiokafka = ["aiokafka>=0.13.0,<1.0.0"]
 motor = ["motor>=3.7.1,<4.0.0"]
-fastapi = ["fastapi[standard]>=0.116.2,<1.0.0"]
-faststream = ["faststream>=0.5.48,<1.0.0"]
-litestar = ["litestar>=2.17.0,<3.0.0"]
-msgspec = ["msgspec>=0.19.0,<1.0.0"]
-opensearch = ["opensearch-py[async]>=3.0.0,<4.0.0"]
+fastapi = ["fastapi[standard]>=0.135.1,<1.0.0"]
+faststream = ["faststream>=0.6.7,<1.0.0"]
+litestar = ["litestar>=2.21.1,<3.0.0"]
+opensearch = ["opensearch-py[async]>=3.1.0,<4.0.0"]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.4.2",
+    "commitizen>=4.13.9",
+    "pip-audit>=2.10.0",
+    "pre-commit-uv>=4.2.1",
+    "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
-    "pytest-asyncio>=1.2.0",
-    "pytest-deadfixtures>=2.2.1,<3.0.0",
-    "python-dotenv>=1.1.1",
-    "pytest-vcr>=1.0.2",
-    "greenlet>=3.2.4",
-    "pre-commit>=4.3.0,<5.0.0",
-    "ruff>=0.13.1",
-    "ty>=0.0.1a21",
-    "deptry>=0.23.1",
+    "pytest-asyncio>=1.3.0",
+    "pytest-deadfixtures>=3.1.0",
+    "python-dotenv>=1.2.2",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
+    "pre-commit>=4.5.1",
+    "ruff>=0.15.6",
+    "rust-just>=1.46.0",
+    "ty>=0.0.23",
+    "deptry>=0.24.0",
 ]
 docs = [
-    "mkdocs-include-markdown-plugin>=7.1.7",
-    "mkdocs>=1.6.1,<2.0.0",
-    "mkdocs-material>=9.6.20",
-    "mkdocstrings[python]>=0.30.1,<1.0.0",
-    "pymdown-extensions>=10.16.1",
+    "mkdocstrings[python]>=1.0.3",
+    "pymdown-extensions>=10.21",
+    "zensical>=0.0.27",
 ]
+
+[tool.ty.environment]
+# Match project.requires-python minimum for type-checking.
+python-version = "3.10"
 
 [tool.deptry]
 experimental_namespace_package = true
 pep621_dev_dependency_groups = ["dev", "docs"]
 
 [tool.deptry.per_rule_ignores]
-DEP002 = ["msgspec"]
-DEP003 = []
 DEP004 = ["dotenv"]
 
 [tool.uv]
 default-groups = []
-
-[tool.uv.sources]
-msgspec = { git = "https://github.com/jcrist/msgspec.git", rev = "main" }
 
 [tool.ruff]
 line-length = 120
@@ -120,66 +114,8 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.ruff.lint]
-select = [
-    "F",      # pyflakes
-    "W",      # pycodestyle warnings
-    "E",      # pycodestyle errors
-    "C90",    # mccabe
-    "I",      # isort
-    "N",      # pep8-naming
-    "D",      # pydocstyle, disabled because of we are using other docstring style
-    "UP",     # pyupgrade
-    "YTT",    # flake8-2020
-    "ANN",    # flake8-annotations
-    "ASYNC",  # flake8-async
-    "S",      # flake8-bandit
-    "BLE",    # flake8-blind-except
-    "FBT",    # flake8-boolean-trap
-    "B",      # flake8-bugbear
-    "A",      # flake8-builtins
-    "COM",    # flake8-commas
-    "CPY",    # flake8-copyright
-    "C4",     # flake8-comprehensions
-    "DTZ",    # flake8-datetimez
-    "T10",    # flake8-debugger
-    "DJ",     # flake8-django
-    "EM",     # flake8-errmsg
-    "EXE",    # flake8-executable
-    "FA",     # flake8-future-annotations
-    "ISC",    # flake8-implicit-str-concat
-    "ICN",    # flake8-import-conventions
-    "G",      # flake8-logging-format
-    "INP",    # flake8-no-pep420
-    "PIE",    # flake8-pie
-    "T20",    # flake8-print
-    "PYI",    # flake8-pyi
-    "PT",     # flake8-pytest
-    "Q",      # flake8-quotes
-    "RSE",    # flake8-raise
-    "RET",    # flake8-return
-    "SLF",    # flake8-self
-    "SLOT",   # flake8-slots
-    "SIM",    # flake8-simplify
-    "TID",    # flake8-tidy-imports
-    "TCH",    # flake8-type-checking
-    "INT",    # flake8-gettext
-    "ARG",    # flake8-unused-arguments
-    "PTH",    # flake8-use-pathlib
-    "TD",     # flake8-todos
-    "FIX",    # flake8-fixme
-    "ERA",    # eradicate
-    "PD",     # pandas-vet
-    "PGH",    # pygrep-hooks
-    "PL",     # Pylint
-    "TRY",    # tryceratops
-    "FLY",    # flynt
-    "NPY",    # NumPy-specific rules
-    "AIR",    # Airflow
-    "PERF",   # Perflint
-    "FURB",   # refurb
-    "LOG",    # flake8-logging
-    "RUF",    # Ruff-specific rules
-]
+preview = true
+select = ["ALL"]
 ignore = [
     "E501",  # line too long, handled by ruff-format
     "CPY001",  # Missing copyright notice at top of file
@@ -188,32 +124,26 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.ruff.lint.flake8-tidy-imports]
-[tool.ruff.lint.flake8-tidy-imports.banned-api]
-"pydantic_core.core_schema.FieldValidationInfo".msg = "FieldValidationInfo` is deprecated, use `ValidationInfo` instead."
-
 [tool.ruff.lint.per-file-ignores]
-"!fast_healthchecks/**.py" = ["D", "S", "SLF"]
+"tests/**/*.py" = ["ARG001", "N802", "N806", "S", "SLF"]
 
 [tool.pytest.ini_options]
-pythonpath = [
-  "."
-]
+# 60s so integration tests (network I/O, e.g. OpenSearch to invalid host) don't get killed on Windows
+# where pytest-timeout uses thread method and can crash the worker when timeout fires
+timeout = 60
+pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
-minversion = "8.0"
+minversion = "9.0"
 addopts = "-ra -q"
 filterwarnings = [
     "error",
     "error:::fast_healthchecks",
-    "ignore:Failing to pass a value to the 'type_params' parameter of 'typing.ForwardRef._evaluate':DeprecationWarning",
-    "ignore:Import of deprecated import 'litestar.contrib.attrs.AttrsSchemaPlugin'. Deprecated in litestar 2.13.0. This import will be removed in 3.0. importing AttrsSchemaPlugin from 'litestar.contrib.attrs' is deprecated, please import it from 'litestar.plugins.attrs' instead:DeprecationWarning",
-    "ignore::DeprecationWarning:aiohttp.connector",
 ]
 markers = """
+    imports: mark a test as an imports test
     integration: mark a test as an integration test
     unit: mark a test as a unit test
-    imports: mark a test as an imports test
 """
 
 [tool.coverage.run]
@@ -244,9 +174,13 @@ name = "cz_conventional_commits"
 tag_format = "$version"
 version_scheme = "semver"
 version_provider = "pep621"
-update_changelog_on_bump = true
+update_changelog_on_bump = false
 major_version_zero = false
 version_files = [
     "pyproject.toml:version",
     "fast_healthchecks/__init__.py:__version__",
 ]
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"

@@ -4,77 +4,118 @@ on:
   workflow_dispatch:
   push:
     branches: ["main"]
-    tags-ignore: ["**"]
+    tags:
+      - "*.*.*"
     paths:
       - "examples/**"
       - "fast_healthchecks/**"
       - "tests/**"
       - ".pre-commit-config.yaml"
       - "pyproject.toml"
-      - "requirements.txt"
       - "uv.lock"
+      - "justfile"
   pull_request:
+    paths:
+      - "examples/**"
+      - "fast_healthchecks/**"
+      - "tests/**"
+      - ".pre-commit-config.yaml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
 
 concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+env:
+  COMPOSE_CACHE_PATH: .cache/docker-compose
+  COMPOSE_CACHE_VERSION: v1
+  VENV_PRECOMMIT_CACHE_VERSION: v1
+
 jobs:
 
   pre-commit:
-    runs-on: ubuntu-latest
     if: github.event.repository.fork == false
+    name: Pre-commit
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON_PREFERENCE: only-managed
     steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
-      - uses: actions/checkout@v5.0.0
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v6.0.0
-        with:
-          python-version: '3.10'
+      - name: Set uv Python install dir
+        run: echo "UV_PYTHON_INSTALL_DIR=${RUNNER_TEMP}/uv-python-dir" >> "$GITHUB_ENV"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6.7.0
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7.3.1
+        with:
+          python-version: '3.10'
+          enable-cache: true
+          cache-python: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Cache key unique per run to avoid "another job may be creating this cache" when
+      # multiple runs or steps evaluate hashFiles differently (e.g. after uv sync).
+      # restore-keys restores the latest cache for this prefix; uv sync fixes deps if needed.
+      # See: https://github.com/actions/cache/blob/main/tips-and-workarounds.md#update-a-cache
+      - name: Restore .venv cache (pre-commit)
+        uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        with:
+          path: .venv
+          key: venv-precommit-${{ env.VENV_PRECOMMIT_CACHE_VERSION }}-${{ runner.os }}-3.10-${{ github.run_id }}
+          restore-keys: |
+            venv-precommit-${{ env.VENV_PRECOMMIT_CACHE_VERSION }}-${{ runner.os }}-3.10-
 
       - name: Install the project
         run: uv sync --all-extras --dev
 
+      - name: Save .venv cache (pre-commit)
+        uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        with:
+          path: .venv
+          key: venv-precommit-${{ env.VENV_PRECOMMIT_CACHE_VERSION }}-${{ runner.os }}-3.10-${{ github.run_id }}
+
       - name: Run pre-commit (uv-managed)
-        run: uv run --no-sync --with pre-commit-uv pre-commit run --show-diff-on-failure --color=always --all-files
+        run: uv run --no-sync pre-commit run --show-diff-on-failure --color=always --all-files
         env:
           SKIP: "detect-aws-credentials,no-commit-to-branch"
 
-  unit-tests:
+  test:
+    name: Test (${{ matrix.python-version }} on ${{ matrix.os }})
     needs: [pre-commit]
-    name: test with ${{ matrix.python-version }} on ${{ matrix.os }} with ${{ matrix.pydantic-version }}
     runs-on: ${{ matrix.os }}
     if: github.event.repository.fork == false
     strategy:
       fail-fast: false
       matrix:
         python-version:
+          - "3.14"
           - "3.13"
           - "3.12"
           - "3.11"
           - "3.10"
-        pydantic-version:
-          - "pydantic-v1"
-          - "pydantic-v2"
         os:
           - ubuntu-latest
-          # - macos-latest
           - windows-latest
-
+    env:
+      PYTHON: ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v5.0.0
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           fetch-depth: 0
-      - name: Install the latest version of uv
 
-        uses: astral-sh/setup-uv@v6.7.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7.3.1
         with:
+          python-version: ${{ matrix.python-version }}
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
+          cache-python: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Add .local/bin to Windows PATH
@@ -82,35 +123,202 @@ jobs:
         shell: bash
         run: echo "$USERPROFILE/.local/bin" >> $GITHUB_PATH
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Install just
+        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b  # v3.1.0
+        with:
+          just-version: '1.46.0'
+
+      # Avoid uv reparse point error 4394 on Windows when cache restores Python 3.14.x
+      - name: Clear Python install dir (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: rm -rf "${UV_PYTHON_INSTALL_DIR:-}" 2>/dev/null || true
+
+      - name: Set up Python
+        shell: bash
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Run Imports Tests
-        run: |
-          uv sync
-          uv pip install pytest pytest-asyncio pytest-cov greenlet
-          uv run pytest --cov --cov-append -m 'imports' tests/unit/test_imports.py
-          uv sync --group=dev --all-extras
+      - name: Copy .env from example
+        shell: bash
+        run: cp .env.example .env
 
-      - name: Install Pydantic v1
-        if: matrix.pydantic-version == 'pydantic-v1'
-        run: uv pip install "pydantic>=1.10.23,<2.0.0"
-
-      - name: Install Pydantic v2
-        if: matrix.pydantic-version == 'pydantic-v2'
-        run: uv pip install "pydantic>=2.11.9,<3.0.0"
-
-      - name: Run Unit Tests
-        run: |
-          uv run pytest --cov --cov-append -m 'unit'
-          uv run coverage xml
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5.5.1
+      # Single cache for both Ubuntu and Windows (WSL uses same Linux images).
+      # enableCrossOsArchive: true so cache saved on Ubuntu extracts correctly when restored on Windows.
+      # restore-keys: if exact key misses, use latest cache (hashFiles is consistent across Windows/Ubuntu for this repo).
+      - name: Restore Docker Compose images
+        id: restore_compose_cache
+        uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          env_vars: OS,PYTHON
-          fail_ci_if_error: true
-          flags: unittests
-          name: codecov-umbrella
-          verbose: true
+          path: ${{ env.COMPOSE_CACHE_PATH }}
+          key: compose-images-${{ env.COMPOSE_CACHE_VERSION }}-${{ hashFiles('docker-compose.yml', '.env.example') }}
+          restore-keys: |
+            compose-images-${{ env.COMPOSE_CACHE_VERSION }}-
+          enableCrossOsArchive: true
+
+      - name: Load cached Docker images (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          if [ -f "${{ env.COMPOSE_CACHE_PATH }}/images.tar" ]; then
+            docker load -i "${{ env.COMPOSE_CACHE_PATH }}/images.tar"
+          fi
+
+      # Pinned by tag: this Kotlin/JS action does not publish prebuilt index.mjs for commit SHA refs, only for release tags.
+      - name: Set up WSL with Ubuntu (Windows)
+        id: setup-wsl
+        if: runner.os == 'Windows'
+        uses: Vampire/setup-wsl@v6.0.0  # v6
+        with:
+          distribution: Ubuntu-22.04
+
+      - name: Start Docker services in WSL
+        if: runner.os == 'Windows'
+        shell: wsl-bash {0}
+        run: |
+          export GITHUB_WORKSPACE="${{ github.workspace }}"
+          WORKSPACE_WSL="$(wslpath -u "$GITHUB_WORKSPACE")"
+          cd "$WORKSPACE_WSL"
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update -qq
+          sudo apt-get install -y ca-certificates curl
+          curl -fsSL https://get.docker.com | sudo sh
+          sudo service docker start
+          # Restore puts cache in workspace (Windows path); WSL sees it under WORKSPACE_WSL
+          CACHE_TAR_IN_WORKSPACE="$WORKSPACE_WSL/${{ env.COMPOSE_CACHE_PATH }}/images.tar"
+          echo "Cache archive in workspace (WSL path): $CACHE_TAR_IN_WORKSPACE"
+          if [ -f "$CACHE_TAR_IN_WORKSPACE" ]; then
+            echo "Copying cache to WSL-native path for faster load..."
+            CACHE_TAR_NATIVE="/tmp/docker-compose-images.tar"
+            cp "$CACHE_TAR_IN_WORKSPACE" "$CACHE_TAR_NATIVE"
+            sudo docker load -i "$CACHE_TAR_NATIVE"
+            rm -f "$CACHE_TAR_NATIVE"
+          else
+            echo "No cached images.tar at $CACHE_TAR_IN_WORKSPACE"
+          fi
+          sudo docker compose up -d --wait
+        timeout-minutes: 10
+
+      - name: Set service hosts to WSL IP (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          WSL_IP=$(wsl hostname -I 2>/dev/null | awk '{print $1}')
+          echo "WSL_HOST=$WSL_IP" >> $GITHUB_ENV
+          echo "POSTGRES_HOST=$WSL_IP" >> $GITHUB_ENV
+          echo "REDIS_HOST=$WSL_IP" >> $GITHUB_ENV
+          echo "RABBITMQ_HOST=$WSL_IP" >> $GITHUB_ENV
+          echo "MONGO_HOSTS=$WSL_IP" >> $GITHUB_ENV
+          echo "OPENSEARCH_HOSTS=$WSL_IP:9200" >> $GITHUB_ENV
+          echo "KAFKA_BOOTSTRAP_SERVERS=$WSL_IP:9094,$WSL_IP:9095" >> $GITHUB_ENV
+          # Ports for "Wait for WSL services" (from .env / docker-compose)
+          for key in POSTGRES_PORT REDIS_PORT RABBITMQ_PORT MONGO_PORT; do
+            val=$(grep -E "^${key}=" .env 2>/dev/null | cut -d= -f2-)
+            [ -z "$val" ] && case $key in POSTGRES_PORT) val=5432;; REDIS_PORT) val=6379;; RABBITMQ_PORT) val=5672;; MONGO_PORT) val=27017;; esac
+            echo "${key}=${val}" >> $GITHUB_ENV
+          done
+          echo "OPENSEARCH_PORT=9200" >> $GITHUB_ENV
+          echo "KAFKA_PORT=9094" >> $GITHUB_ENV
+          # Integration app reads DSNs from env; override so readiness checks reach WSL services
+          for key in POSTGRES_DSN REDIS_DSN RABBITMQ_DSN MONGO_DSN; do
+            val=$(grep -E "^${key}=" .env 2>/dev/null | cut -d= -f2- | sed "s/localhost/$WSL_IP/g")
+            [ -n "$val" ] && echo "${key}=$val" >> $GITHUB_ENV
+          done
+
+      # Wait until Windows host can reach each WSL service (docker --wait is inside WSL; host visibility can lag)
+      - name: Wait for WSL services reachable from Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          uv run python -c "
+          import os, socket, time
+          host = os.environ.get('WSL_HOST', '')
+          if not host:
+              raise SystemExit('WSL_HOST not set')
+          # Ports from .env / docker-compose: Postgres, Redis, RabbitMQ, Mongo, OpenSearch, Kafka
+          ports = [
+              int(os.environ.get('POSTGRES_PORT', 5432)),
+              int(os.environ.get('REDIS_PORT', 6379)),
+              int(os.environ.get('RABBITMQ_PORT', 5672)),
+              int(os.environ.get('MONGO_PORT', 27017)),
+              int(os.environ.get('OPENSEARCH_PORT', 9200)),
+              int(os.environ.get('KAFKA_PORT', 9094)),
+          ]
+          for attempt in range(30):
+              try:
+                  for p in ports:
+                      s = socket.create_connection((host, p), timeout=2)
+                      s.close()
+                  print('All services reachable.')
+                  raise SystemExit(0)
+              except OSError:
+                  pass
+              time.sleep(2)
+          raise SystemExit('Timeout waiting for WSL services')
+          "
+
+      - name: Print Python DSN env vars (diagnostic)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "--- Python DSN env (diagnostic) ---"
+          uv run python -c "
+          import os
+          for key in ['POSTGRES_DSN', 'REDIS_DSN', 'RABBITMQ_DSN', 'MONGO_DSN', 'OPENSEARCH_HOSTS', 'KAFKA_BOOTSTRAP_SERVERS']:
+              print(f'{key}:', os.environ.get(key, 'NOT_SET'))
+          "
+          echo "------------------------------------"
+
+      - name: Run all tests
+        timeout-minutes: 5
+        shell: bash
+        env:
+          DOCKER_SERVICES_UP: ${{ runner.os == 'Windows' && '1' || '' }}
+          # Diagnostic logging (helps diagnose Windows readiness 503s)
+          PYTHONWARNINGS: always
+          LOG_LEVEL: DEBUG
+          FASTHEALTHCHECKS_LOG_LEVEL: DEBUG
+        run: just tests-all
+
+      # Only save and re-upload cache when we had a cache miss (pulled/built images this run).
+      # When cache hit, restore already put images.tar in place; skip docker save and cache/save.
+      - name: Save Docker Compose images (Ubuntu)
+        if: runner.os == 'Linux' && matrix.python-version == '3.14' && steps.restore_compose_cache.outputs.cache-hit != 'true' && always()
+        run: |
+          mkdir -p ${{ env.COMPOSE_CACHE_PATH }}
+          IMAGES=$(docker compose config --images 2>/dev/null)
+          if [ -n "$IMAGES" ]; then
+            echo "$IMAGES" | xargs docker save -o ${{ env.COMPOSE_CACHE_PATH }}/images.tar
+          fi
+
+      - name: Check Docker images cache size
+        id: docker_cache_size
+        if: runner.os == 'Linux' && matrix.python-version == '3.14' && steps.restore_compose_cache.outputs.cache-hit != 'true' && always()
+        shell: bash
+        run: |
+          SIZE=0
+          if [ -f "${{ env.COMPOSE_CACHE_PATH }}/images.tar" ]; then
+            SIZE=$(uv run python -c "import os; print(os.path.getsize('${{ env.COMPOSE_CACHE_PATH }}/images.tar'))")
+          fi
+          echo "size=$SIZE" >> $GITHUB_OUTPUT
+          if [ "$SIZE" -gt 1000000 ] 2>/dev/null; then
+            echo "valid=true" >> $GITHUB_OUTPUT
+          else
+            echo "valid=false" >> $GITHUB_OUTPUT
+          fi
+          echo "images.tar size: $SIZE bytes (valid for cache: $([ "$SIZE" -gt 1000000 ] 2>/dev/null && echo true || echo false))"
+
+      - name: Cache Docker Compose images
+        if: runner.os == 'Linux' && matrix.python-version == '3.14' && steps.restore_compose_cache.outputs.cache-hit != 'true' && steps.docker_cache_size.outcome == 'success' && steps.docker_cache_size.outputs.valid == 'true' && always()
+        uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        continue-on-error: true
+        with:
+          path: ${{ env.COMPOSE_CACHE_PATH }}
+          key: compose-images-${{ env.COMPOSE_CACHE_VERSION }}-${{ hashFiles('docker-compose.yml', '.env.example') }}
+          enableCrossOsArchive: true
+
+      - name: Stop Docker services in WSL
+        if: runner.os == 'Windows' && steps.setup_wsl.outcome == 'success' && always()
+        shell: wsl-bash {0}
+        run: |
+          export GITHUB_WORKSPACE="${{ github.workspace }}"
+          cd "$(wslpath -u "$GITHUB_WORKSPACE")"
+          sudo docker compose down --remove-orphans --volumes

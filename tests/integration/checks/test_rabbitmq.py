@@ -1,71 +1,61 @@
-from typing import Any, TypedDict
+"""Integration tests for RabbitMQHealthCheck against real broker."""
+
+import asyncio
+from typing import Any
 
 import pytest
 
 from fast_healthchecks.checks.rabbitmq import RabbitMQHealthCheck
 from fast_healthchecks.models import HealthCheckResult
+from tests.integration.test_assertions import (
+    CONNECTION_REFUSED_FRAGMENTS,
+    DNS_ERROR_FRAGMENTS,
+    assert_error_contains_any,
+)
 
 pytestmark = pytest.mark.integration
 
 
-class RabbitMqConfig(TypedDict, total=True):
-    host: str
-    port: int
-    user: str | None
-    password: str | None
-    vhost: str | None
-
-
-@pytest.fixture(scope="session", name="rabbitmq_config")
-def fixture_rabbitmq_config(env_config: dict[str, Any]) -> RabbitMqConfig:
-    result: RabbitMqConfig = {
-        "host": "localhost",
-        "port": 5672,
-        "user": None,
-        "password": None,
-        "vhost": "/",
-    }
-    for key in ("host", "port", "user", "password", "vhost"):
-        value = env_config.get(f"RABBITMQ_{key.upper()}")
-        match key:
-            case "port":
-                if value is not None:
-                    result[key] = int(value)
-            case _:
-                if value is not None:
-                    result[key] = str(value)
-
-    return result
-
-
 @pytest.mark.asyncio
-async def test_rabbitmq_check_success(rabbitmq_config: RabbitMqConfig) -> None:
-    check = RabbitMQHealthCheck(**rabbitmq_config)  # ty: ignore[missing-argument]
-    result = await check()
+async def test_rabbitmq_check_success(rabbitmq_check: RabbitMQHealthCheck) -> None:
+    """RabbitMQ check returns healthy against real broker."""
+    result = await rabbitmq_check()
     assert result == HealthCheckResult(name="RabbitMQ", healthy=True, error_details=None)
 
 
 @pytest.mark.asyncio
-async def test_rabbitmq_check_failure(rabbitmq_config: RabbitMqConfig) -> None:
-    config = {
-        **rabbitmq_config,
-        "host": "localhost2",
-    }
-    check = RabbitMQHealthCheck(**config)  # ty: ignore[missing-argument]
-    result = await check()
-    assert result.healthy is False
-    assert result.error_details is not None
-    assert "nodename nor servname provided, or not known" in result.error_details
+async def test_rabbitmq_check_failure(rabbitmq_config: dict[str, Any]) -> None:
+    """RabbitMQ check returns unhealthy when broker unreachable."""
+    check = RabbitMQHealthCheck(
+        host="localhost2",
+        port=rabbitmq_config["port"],
+        user=rabbitmq_config["user"],
+        password=rabbitmq_config["password"],
+        vhost=rabbitmq_config["vhost"],
+    )
+    try:
+        result = await check()
+        assert result.healthy is False
+        assert_error_contains_any(result.error_details, DNS_ERROR_FRAGMENTS)
+    finally:
+        await check.aclose()
+        await asyncio.sleep(0.1)
 
 
 @pytest.mark.asyncio
-async def test_rabbitmq_check_connection_error(rabbitmq_config: RabbitMqConfig) -> None:
-    config = {
-        **rabbitmq_config,
-        "port": 5673,
-    }
-    check = RabbitMQHealthCheck(**config)  # ty: ignore[missing-argument]
-    result = await check()
-    assert result.healthy is False
-    assert result.error_details is not None
-    assert "Connect call failed" in result.error_details
+async def test_rabbitmq_check_connection_error(rabbitmq_config: dict[str, Any]) -> None:
+    """RabbitMQ check returns unhealthy with error_details on connection error."""
+    check = RabbitMQHealthCheck(
+        host=rabbitmq_config["host"],
+        port=5673,
+        user=rabbitmq_config["user"],
+        password=rabbitmq_config["password"],
+        vhost=rabbitmq_config["vhost"],
+    )
+    try:
+        result = await check()
+        assert result.healthy is False
+        assert_error_contains_any(result.error_details, CONNECTION_REFUSED_FRAGMENTS)
+    finally:
+        await check.aclose()
+        await asyncio.sleep(0.1)

@@ -1,3 +1,5 @@
+"""Unit tests for PostgreSQLPsycopgHealthCheck."""
+
 import ssl
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
@@ -8,10 +10,13 @@ from psycopg.connection_async import AsyncConnection, AsyncCursor
 
 from fast_healthchecks.checks.postgresql.base import create_ssl_context
 from fast_healthchecks.checks.postgresql.psycopg import PostgreSQLPsycopgHealthCheck
+from fast_healthchecks.errors import DEPENDENCY_UNHEALTHY
+from fast_healthchecks.utils import parse_query_string
 from tests.utils import (
     TEST_SSLCERT,
     TEST_SSLKEY,
     TEST_SSLROOTCERT,
+    assert_check_init,
     create_temp_files,
 )
 
@@ -23,15 +28,39 @@ pytestmark = pytest.mark.unit
     [
         (
             {},
-            "missing 2 required keyword-only arguments: 'host' and 'port'",
-            TypeError,
+            {
+                "host": "localhost",
+                "port": 5432,
+                "user": None,
+                "password": None,
+                "database": None,
+                "sslmode": None,
+                "sslcert": None,
+                "sslkey": None,
+                "sslrootcert": None,
+                "timeout": 5.0,
+                "name": "PostgreSQL",
+            },
+            None,
         ),
         (
             {
                 "host": "localhost",
             },
-            "missing 1 required keyword-only argument: 'port'",
-            TypeError,
+            {
+                "host": "localhost",
+                "port": 5432,
+                "user": None,
+                "password": None,
+                "database": None,
+                "sslmode": None,
+                "sslcert": None,
+                "sslkey": None,
+                "sslrootcert": None,
+                "timeout": 5.0,
+                "name": "PostgreSQL",
+            },
+            None,
         ),
         (
             {
@@ -791,12 +820,8 @@ pytestmark = pytest.mark.unit
     ],
 )
 def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception: type[BaseException] | None) -> None:
-    if exception is not None and isinstance(expected, str):
-        with pytest.raises(exception, match=expected):
-            PostgreSQLPsycopgHealthCheck(**params)  # ty: ignore[missing-argument]
-    else:
-        obj = PostgreSQLPsycopgHealthCheck(**params)  # ty: ignore[missing-argument]
-        assert obj.to_dict() == expected
+    """PostgreSQLPsycopgHealthCheck.__init__ and to_dict match expected or raise."""
+    assert_check_init(lambda: PostgreSQLPsycopgHealthCheck(**params), expected, exception)
 
 
 @pytest.mark.parametrize(
@@ -910,7 +935,7 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
                 "host": "localhost",
                 "password": "pass",
                 "port": 5432,
-                "sslcert": TEST_SSLCERT,
+                "sslcert": unquote(TEST_SSLCERT),
                 "sslkey": None,
                 "sslmode": "allow",
                 "sslrootcert": None,
@@ -930,8 +955,8 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
                 "host": "localhost",
                 "password": "pass",
                 "port": 5432,
-                "sslcert": TEST_SSLCERT,
-                "sslkey": TEST_SSLKEY,
+                "sslcert": unquote(TEST_SSLCERT),
+                "sslkey": unquote(TEST_SSLKEY),
                 "sslmode": "allow",
                 "sslrootcert": None,
                 "user": "postgres",
@@ -950,10 +975,10 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
                 "host": "localhost",
                 "password": "pass",
                 "port": 5432,
-                "sslcert": TEST_SSLCERT,
-                "sslkey": TEST_SSLKEY,
+                "sslcert": unquote(TEST_SSLCERT),
+                "sslkey": unquote(TEST_SSLKEY),
                 "sslmode": "allow",
-                "sslrootcert": TEST_SSLROOTCERT,
+                "sslrootcert": unquote(TEST_SSLROOTCERT),
                 "user": "postgres",
                 "timeout": 5.0,
                 "name": "PostgreSQL",
@@ -986,7 +1011,7 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
                 "host": "localhost",
                 "password": "pass",
                 "port": 5432,
-                "sslcert": TEST_SSLCERT,
+                "sslcert": unquote(TEST_SSLCERT),
                 "sslkey": None,
                 "sslmode": "prefer",
                 "sslrootcert": None,
@@ -1006,8 +1031,8 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
                 "host": "localhost",
                 "password": "pass",
                 "port": 5432,
-                "sslcert": TEST_SSLCERT,
-                "sslkey": TEST_SSLKEY,
+                "sslcert": unquote(TEST_SSLCERT),
+                "sslkey": unquote(TEST_SSLKEY),
                 "sslmode": "prefer",
                 "sslrootcert": None,
                 "user": "postgres",
@@ -1026,10 +1051,10 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
                 "host": "localhost",
                 "password": "pass",
                 "port": 5432,
-                "sslcert": TEST_SSLCERT,
-                "sslkey": TEST_SSLKEY,
+                "sslcert": unquote(TEST_SSLCERT),
+                "sslkey": unquote(TEST_SSLKEY),
                 "sslmode": "prefer",
-                "sslrootcert": TEST_SSLROOTCERT,
+                "sslrootcert": unquote(TEST_SSLROOTCERT),
                 "user": "postgres",
                 "timeout": 5.0,
                 "name": "PostgreSQL",
@@ -1058,8 +1083,8 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
                 "host": "localhost",
                 "password": "pass",
                 "port": 5432,
-                "sslcert": TEST_SSLCERT,
-                "sslkey": TEST_SSLKEY,
+                "sslcert": unquote(TEST_SSLCERT),
+                "sslkey": unquote(TEST_SSLKEY),
                 "sslmode": "verify-full",
                 "sslrootcert": None,
                 "user": "postgres",
@@ -1078,10 +1103,10 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
                 "host": "localhost",
                 "password": "pass",
                 "port": 5432,
-                "sslcert": TEST_SSLCERT,
-                "sslkey": TEST_SSLKEY,
+                "sslcert": unquote(TEST_SSLCERT),
+                "sslkey": unquote(TEST_SSLKEY),
                 "sslmode": "verify-full",
-                "sslrootcert": TEST_SSLROOTCERT,
+                "sslrootcert": unquote(TEST_SSLROOTCERT),
                 "user": "postgres",
                 "timeout": 5.0,
                 "name": "PostgreSQL",
@@ -1100,10 +1125,10 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
                 "host": "localhost",
                 "password": "pass",
                 "port": 5432,
-                "sslcert": TEST_SSLCERT,
-                "sslkey": TEST_SSLKEY,
+                "sslcert": unquote(TEST_SSLCERT),
+                "sslkey": unquote(TEST_SSLKEY),
                 "sslmode": "verify-full",
-                "sslrootcert": TEST_SSLROOTCERT,
+                "sslrootcert": unquote(TEST_SSLROOTCERT),
                 "user": "postgres",
                 "timeout": 10.0,
                 "name": "PostgreSQL",
@@ -1123,10 +1148,10 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
                 "host": "localhost",
                 "password": "pass",
                 "port": 5432,
-                "sslcert": TEST_SSLCERT,
-                "sslkey": TEST_SSLKEY,
+                "sslcert": unquote(TEST_SSLCERT),
+                "sslkey": unquote(TEST_SSLKEY),
                 "sslmode": "verify-full",
-                "sslrootcert": TEST_SSLROOTCERT,
+                "sslrootcert": unquote(TEST_SSLROOTCERT),
                 "user": "postgres",
                 "timeout": 10.0,
                 "name": "test",
@@ -1141,24 +1166,20 @@ def test_from_dsn(
     expected: dict[str, Any] | str,
     exception: type[BaseException] | None,
 ) -> None:
+    """Test from_dsn with various DSN and SSL options."""
     parse_result: ParseResult = urlparse(args[0])
-    query = {k: unquote(v) for k, v in (q.split("=", 1) for q in parse_result.query.split("&"))}
+    query = parse_query_string(parse_result.query)
     files = [y for x, y in query.items() if x in {"sslcert", "sslkey", "sslrootcert"}]
-
-    if exception is not None and isinstance(expected, str):
-        with pytest.raises(exception, match=expected), create_temp_files(files):
-            PostgreSQLPsycopgHealthCheck.from_dsn(*args, **kwargs)
-    else:
-        with create_temp_files(files):
-            check = PostgreSQLPsycopgHealthCheck.from_dsn(*args, **kwargs)
-            if "ssl" in expected and expected["ssl"] is not None:  # ty: ignore[invalid-argument-type]
-                expected["ssl"] = create_ssl_context(*expected["ssl"])  # ty: ignore[invalid-argument-type,possibly-unbound-implicit-call]
-            assert check.to_dict() == expected
+    with create_temp_files(files):
+        if exception is None and isinstance(expected, dict) and "ssl" in expected and expected["ssl"] is not None:
+            expected["ssl"] = create_ssl_context(*expected["ssl"])
+        assert_check_init(lambda: PostgreSQLPsycopgHealthCheck.from_dsn(*args, **kwargs), expected, exception)
 
 
 @pytest.mark.asyncio
-async def test_psycopg_AsyncConnection_connect_args_kwargs() -> None:  # noqa: N802
-    with create_temp_files([TEST_SSLCERT, TEST_SSLKEY, TEST_SSLROOTCERT]):
+async def test_psycopg_AsyncConnection_connect_args_kwargs() -> None:
+    """Constructor and SSL args are passed through to psycopg connect."""
+    with create_temp_files([unquote(TEST_SSLCERT), unquote(TEST_SSLKEY), unquote(TEST_SSLROOTCERT)]):
         health_check = PostgreSQLPsycopgHealthCheck(
             host="localhost2",
             port=6432,
@@ -1166,16 +1187,16 @@ async def test_psycopg_AsyncConnection_connect_args_kwargs() -> None:  # noqa: N
             password="password",
             database="db",
             sslmode="verify-full",
-            sslcert=TEST_SSLCERT,
-            sslkey=TEST_SSLKEY,
-            sslrootcert=TEST_SSLROOTCERT,
+            sslcert=unquote(TEST_SSLCERT),
+            sslkey=unquote(TEST_SSLKEY),
+            sslrootcert=unquote(TEST_SSLROOTCERT),
             timeout=1.5,
             name="test",
         )
-        AsyncConnection_mock = MagicMock(spec=AsyncConnection)  # noqa: N806
+        AsyncConnection_mock = MagicMock(spec=AsyncConnection)
         closed = PropertyMock(return_value=False)
         type(AsyncConnection_mock).closed = closed
-        AsyncCursor_mock = MagicMock(spec=AsyncCursor)  # noqa: N806
+        AsyncCursor_mock = MagicMock(spec=AsyncCursor)
         AsyncConnection_mock.cursor.return_value = AsyncCursor_mock
         AsyncCursor_mock.__aenter__.return_value = AsyncCursor_mock
         with patch(
@@ -1190,9 +1211,10 @@ async def test_psycopg_AsyncConnection_connect_args_kwargs() -> None:  # noqa: N
                 password="password",
                 dbname="db",
                 sslmode="verify-full",
-                sslcert=TEST_SSLCERT,
-                sslkey=TEST_SSLKEY,
-                sslrootcert=TEST_SSLROOTCERT,
+                sslcert=unquote(TEST_SSLCERT),
+                sslkey=unquote(TEST_SSLKEY),
+                sslrootcert=unquote(TEST_SSLROOTCERT),
+                connect_timeout=1,
             )
             asyncpg_connect_mock.assert_awaited_once_with(
                 host="localhost2",
@@ -1201,9 +1223,10 @@ async def test_psycopg_AsyncConnection_connect_args_kwargs() -> None:  # noqa: N
                 password="password",
                 dbname="db",
                 sslmode="verify-full",
-                sslcert=TEST_SSLCERT,
-                sslkey=TEST_SSLKEY,
-                sslrootcert=TEST_SSLROOTCERT,
+                sslcert=unquote(TEST_SSLCERT),
+                sslkey=unquote(TEST_SSLKEY),
+                sslrootcert=unquote(TEST_SSLROOTCERT),
+                connect_timeout=1,
             )
             AsyncConnection_mock.cursor.assert_called_once_with()
             AsyncCursor_mock.execute.assert_called_once_with("SELECT 1")
@@ -1219,7 +1242,8 @@ async def test_psycopg_AsyncConnection_connect_args_kwargs() -> None:  # noqa: N
 
 @pytest.mark.asyncio
 async def test__call_success() -> None:
-    with create_temp_files([TEST_SSLCERT, TEST_SSLKEY, TEST_SSLROOTCERT]):
+    """Check returns healthy when connection and ping succeed."""
+    with create_temp_files([unquote(TEST_SSLCERT), unquote(TEST_SSLKEY), unquote(TEST_SSLROOTCERT)]):
         health_check = PostgreSQLPsycopgHealthCheck(
             host="localhost",
             port=5432,
@@ -1227,14 +1251,14 @@ async def test__call_success() -> None:
             password="password",
             database="db",
             sslmode="verify-full",
-            sslcert=TEST_SSLCERT,
-            sslkey=TEST_SSLKEY,
-            sslrootcert=TEST_SSLROOTCERT,
+            sslcert=unquote(TEST_SSLCERT),
+            sslkey=unquote(TEST_SSLKEY),
+            sslrootcert=unquote(TEST_SSLROOTCERT),
             timeout=1.5,
             name="test",
         )
-        AsyncConnection_mock = AsyncMock(spec=AsyncConnection)  # noqa: N806
-        AsyncCursor_mock = AsyncMock(spec=AsyncCursor)  # noqa: N806
+        AsyncConnection_mock = AsyncMock(spec=AsyncConnection)
+        AsyncCursor_mock = AsyncMock(spec=AsyncCursor)
         AsyncConnection_mock.cursor.return_value.__aenter__.return_value = AsyncCursor_mock
         AsyncCursor_mock.execute.return_value = None
         AsyncCursor_mock.fetchone.return_value = (1,)
@@ -1243,12 +1267,13 @@ async def test__call_success() -> None:
             result = await health_check()
             assert result.healthy is True
             assert result.name == "test"
-            assert result.error_details is None
+            assert result.error is None
 
 
 @pytest.mark.asyncio
 async def test__call_failure() -> None:
-    with create_temp_files([TEST_SSLCERT, TEST_SSLKEY, TEST_SSLROOTCERT]):
+    """Check returns unhealthy when connection fails."""
+    with create_temp_files([unquote(TEST_SSLCERT), unquote(TEST_SSLKEY), unquote(TEST_SSLROOTCERT)]):
         health_check = PostgreSQLPsycopgHealthCheck(
             host="localhost",
             port=5432,
@@ -1256,14 +1281,14 @@ async def test__call_failure() -> None:
             password="password",
             database="db",
             sslmode="verify-full",
-            sslcert=TEST_SSLCERT,
-            sslkey=TEST_SSLKEY,
-            sslrootcert=TEST_SSLROOTCERT,
+            sslcert=unquote(TEST_SSLCERT),
+            sslkey=unquote(TEST_SSLKEY),
+            sslrootcert=unquote(TEST_SSLROOTCERT),
             timeout=1.5,
             name="test",
         )
-        AsyncConnection_mock = AsyncMock(spec=AsyncConnection)  # noqa: N806
-        AsyncCursor_mock = AsyncMock(spec=AsyncCursor)  # noqa: N806
+        AsyncConnection_mock = AsyncMock(spec=AsyncConnection)
+        AsyncCursor_mock = AsyncMock(spec=AsyncCursor)
         AsyncConnection_mock.cursor.return_value.__aenter__.return_value = AsyncCursor_mock
         AsyncCursor_mock.execute.side_effect = Exception("Database error")
 
@@ -1271,4 +1296,34 @@ async def test__call_failure() -> None:
             result = await health_check()
             assert result.healthy is False
             assert result.name == "test"
-            assert "Database error" in str(result.error_details)
+            assert result.error is not None
+            assert "Database error" in result.error.message
+
+
+@pytest.mark.asyncio
+async def test__call_query_returns_false_dependency_unhealthy() -> None:
+    """SELECT result that evaluates to False produces DEPENDENCY_UNHEALTHY."""
+    health_check = PostgreSQLPsycopgHealthCheck(
+        host="localhost",
+        port=5432,
+        user="user",
+        password="password",
+        database="db",
+        sslmode="disable",
+        sslcert=None,
+        sslkey=None,
+        sslrootcert=None,
+        timeout=1.5,
+        name="test",
+    )
+    async_connection_mock = AsyncMock(spec=AsyncConnection)
+    async_cursor_mock = AsyncMock(spec=AsyncCursor)
+    async_connection_mock.cursor.return_value.__aenter__.return_value = async_cursor_mock
+    async_cursor_mock.execute.return_value = None
+    async_cursor_mock.fetchone.return_value = None
+
+    with patch("psycopg.AsyncConnection.connect", return_value=async_connection_mock):
+        result = await health_check()
+        assert result.healthy is False
+        assert result.error is not None
+        assert result.error.code == DEPENDENCY_UNHEALTHY

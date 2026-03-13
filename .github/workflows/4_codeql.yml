@@ -1,0 +1,49 @@
+name: CodeQL
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "examples/**"
+      - "fast_healthchecks/**"
+      - "tests/**"
+      - ".pre-commit-config.yaml"
+      - "pyproject.toml"
+      - "uv.lock"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "examples/**"
+      - "fast_healthchecks/**"
+      - "tests/**"
+      - ".pre-commit-config.yaml"
+      - "pyproject.toml"
+      - "uv.lock"
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL analysis
+    runs-on: ubuntu-latest
+    if: github.event.repository.fork == false
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9e907b5e64f6b83e7804b09294d44122997950d6  # v4
+        with:
+          languages: python
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@9e907b5e64f6b83e7804b09294d44122997950d6  # v4
+        with:
+          category: "/language:python"

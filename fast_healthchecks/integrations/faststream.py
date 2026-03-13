@@ -1,64 +1,74 @@
 """FastStream integration for health checks."""
 
-from collections.abc import Iterable
-from http import HTTPStatus
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from faststream.asgi.handlers import get
 from faststream.asgi.response import AsgiResponse
+from faststream.specification.schema.extra.tag import Tag
 
-from fast_healthchecks.integrations.base import HandlerType, Probe, default_handler, make_probe_asgi
+from fast_healthchecks.integrations.base import (
+    Probe,
+    ProbeRouteOptions,
+    build_health_routes,
+    create_probe_route_handler,
+    healthcheck_shutdown,
+    probe_route_path,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from faststream.asgi.types import ASGIApp, Scope
 
+    from fast_healthchecks.execution import ProbeRunner
 
-def _add_probe_route(  # noqa: PLR0913
+__all__ = ["health", "healthcheck_shutdown"]
+
+
+def _add_probe_route(
     probe: Probe,
+    options: ProbeRouteOptions,
     *,
-    success_handler: HandlerType = default_handler,
-    failure_handler: HandlerType = default_handler,
-    success_status: int = HTTPStatus.NO_CONTENT,
-    failure_status: int = HTTPStatus.SERVICE_UNAVAILABLE,
-    debug: bool = False,
-    prefix: str = "/health",
-) -> tuple[str, "ASGIApp"]:
-    probe_handler = make_probe_asgi(
+    runner: ProbeRunner | None = None,
+) -> tuple[str, ASGIApp]:
+    params = options.to_route_params()
+    handler_impl = create_probe_route_handler(
         probe,
-        success_handler=success_handler,
-        failure_handler=failure_handler,
-        success_status=success_status,
-        failure_status=failure_status,
-        debug=debug,
+        params,
+        response_factory=lambda c, h, s: AsgiResponse(c, s, headers=h),
+        runner=runner,
     )
 
-    @get
-    async def handle_request(scope: "Scope") -> AsgiResponse:  # noqa: ARG001
-        content, headers, status_code = await probe_handler()
-        return AsgiResponse(content, status_code=status_code, headers=headers)
+    @get(
+        include_in_schema=options.debug,
+        description=probe.endpoint_summary,
+        tags=[Tag(name="Healthchecks")] if options.debug else None,
+        unique_id=f"health:{probe.name}",
+    )
+    async def handle_request(_scope: Scope) -> AsgiResponse:
+        return await handler_impl()
 
-    return f"{prefix.removesuffix('/')}/{probe.name.removeprefix('/')}", handle_request
+    return probe_route_path(probe, options.prefix), handle_request
 
 
-def health(  # noqa: PLR0913
+def health(
     *probes: Probe,
-    success_handler: HandlerType = default_handler,
-    failure_handler: HandlerType = default_handler,
-    success_status: int = HTTPStatus.NO_CONTENT,
-    failure_status: int = HTTPStatus.SERVICE_UNAVAILABLE,
-    debug: bool = False,
-    prefix: str = "/health",
-) -> Iterable[tuple[str, "ASGIApp"]]:
-    """Make list of routes for healthchecks."""
-    return [
-        _add_probe_route(
-            probe,
-            success_handler=success_handler,
-            failure_handler=failure_handler,
-            success_status=success_status,
-            failure_status=failure_status,
-            debug=debug,
-            prefix=prefix,
-        )
-        for probe in probes
-    ]
+    options: ProbeRouteOptions | None = None,
+    runner: ProbeRunner | None = None,
+) -> Iterable[tuple[str, ASGIApp]]:
+    """Make list of routes for healthchecks.
+
+    Returns:
+        Iterable[tuple[str, ASGIApp]]: Generated healthcheck routes.
+
+    To close health check resources on app shutdown, pass the same probes
+    to ``healthcheck_shutdown(probes)`` and register the returned callback
+    with your FastStream app's shutdown hooks (e.g. ``@app.on_shutdown``).
+    """
+    return build_health_routes(
+        probes,
+        add_route=lambda probe, route_options: _add_probe_route(probe, route_options, runner=runner),
+        options=options,
+    )

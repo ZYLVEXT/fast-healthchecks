@@ -1,4 +1,6 @@
-from typing import Any, TypedDict
+"""Integration tests for KafkaHealthCheck against real broker."""
+
+from typing import Any
 
 import pytest
 
@@ -8,53 +10,43 @@ from fast_healthchecks.models import HealthCheckResult
 pytestmark = pytest.mark.integration
 
 
-class KafkaConfig(TypedDict, total=True):
-    bootstrap_servers: str
-
-
-@pytest.fixture(scope="session", name="kafka_config")
-def fixture_kafka_config(env_config: dict[str, Any]) -> KafkaConfig:
-    result: KafkaConfig = {
-        "bootstrap_servers": "localhost:9092",
-    }
-    for key in ("bootstrap_servers",):
-        value = env_config.get(f"KAFKA_{key.upper()}")
-        match key:
-            case _:
-                if value is not None:
-                    result[key] = str(value)
-
-    return result
-
-
 @pytest.mark.asyncio
-async def test_kafka_check_success(kafka_config: KafkaConfig) -> None:
-    check = KafkaHealthCheck(**kafka_config)  # ty: ignore[missing-argument]
-    result = await check()
+async def test_kafka_check_success(kafka_check: KafkaHealthCheck) -> None:
+    """Kafka check returns healthy against real broker."""
+    result = await kafka_check()
     assert result == HealthCheckResult(name="Kafka", healthy=True, error_details=None)
 
 
 @pytest.mark.asyncio
-async def test_kafka_check_failure(kafka_config: KafkaConfig) -> None:
-    config = {
+async def test_kafka_check_failure(kafka_config: dict[str, Any]) -> None:
+    """Kafka check returns unhealthy when broker unreachable."""
+    config: dict[str, Any] = {
         **kafka_config,
         "bootstrap_servers": "localhost2:9093",
     }
-    check = KafkaHealthCheck(**config)  # ty: ignore[missing-argument]
-    result = await check()
-    assert result.healthy is False
-    assert result.error_details is not None
-    assert "Unable to bootstrap from" in result.error_details
+    check = KafkaHealthCheck(**config)
+    try:
+        result = await check()
+        assert result.healthy is False
+        assert result.error_details is not None
+        assert "Unable to bootstrap from" in result.error_details
+    finally:
+        await check.aclose()
 
 
 @pytest.mark.asyncio
-async def test_kafka_check_connection_error(kafka_config: KafkaConfig) -> None:
-    config = {
+async def test_kafka_check_connection_error(kafka_config: dict[str, Any]) -> None:
+    """Kafka check returns unhealthy with error_details on connection error."""
+    # Use closed port to guarantee connection refused (not a running broker)
+    config: dict[str, Any] = {
         **kafka_config,
-        "bootstrap_servers": "localhost:9092",
+        "bootstrap_servers": "localhost:19092",
     }
-    check = KafkaHealthCheck(**config)  # ty: ignore[missing-argument]
-    result = await check()
-    assert result.healthy is False
-    assert result.error_details is not None
-    assert "Unable to bootstrap from" in result.error_details
+    check = KafkaHealthCheck(**config)
+    try:
+        result = await check()
+        assert result.healthy is False
+        assert result.error_details is not None
+        assert "Unable to bootstrap from" in result.error_details
+    finally:
+        await check.aclose()

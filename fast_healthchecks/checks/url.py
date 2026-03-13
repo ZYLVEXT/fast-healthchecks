@@ -1,121 +1,134 @@
-"""This module provides a health check class for URLs.
+"""Health check that performs an HTTP GET to a URL.
 
-Classes:
-    UrlHealthCheck: A class to perform health checks on URLs.
-
-Usage:
-    The UrlHealthCheck class can be used to perform health checks on URLs by calling it.
-
-Example:
-    health_check = UrlHealthCheck(
-        url="https://www.google.com",
-    )
-    result = await health_check()
-    print(result.healthy)
+UrlHealthCheck caches an httpx AsyncClient and supports optional basic auth,
+SSL verification, and SSRF protection (block_private_hosts).
 """
 
+from __future__ import annotations
+
 from http import HTTPStatus
-from traceback import format_exc
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, Any, final
+from urllib.parse import urlparse
 
-from fast_healthchecks.checks._base import DEFAULT_HC_TIMEOUT, HealthCheck
+from fast_healthchecks.checks._base import (
+    _CLIENT_CACHING_SLOTS,
+    ClientCachingMixin,
+    ConfigDictMixin,
+    HealthCheck,
+    healthcheck_safe,
+    result_unhealthy_dependency,
+)
+from fast_healthchecks.checks._imports import raise_optional_import_error
+from fast_healthchecks.checks.configs import UrlConfig
 from fast_healthchecks.models import HealthCheckResult
-
-IMPORT_ERROR_MSG = "httpx is not installed. Install it with `pip install httpx`."
+from fast_healthchecks.utils import validate_host_ssrf_async, validate_url_ssrf
 
 try:
     from httpx import AsyncClient, AsyncHTTPTransport, BasicAuth, Response
 except ImportError as exc:
-    raise ImportError(IMPORT_ERROR_MSG) from exc
+    raise_optional_import_error("httpx", "httpx", exc)
 
 if TYPE_CHECKING:
-    from httpx._types import URLTypes
+    import asyncio
+    from collections.abc import Awaitable, Callable
+
+
+def _close_url_client(client: AsyncClient) -> Awaitable[None]:
+    return client.aclose()
 
 
 @final
-class UrlHealthCheck(HealthCheck[HealthCheckResult]):
-    """A class to perform health checks on URLs.
+class UrlHealthCheck(ClientCachingMixin["AsyncClient"], ConfigDictMixin, HealthCheck[HealthCheckResult]):
+    """Health check that performs an HTTP GET to a configurable URL.
 
-    Attributes:
-        _name: The name of the health check.
-        _password: The password to authenticate with.
-        _timeout: The timeout for the connection.
-        _url: The URL to connect to.
-        _username: The user to authenticate with.
-        _verify_ssl: Whether to verify the SSL certificate.
+    Supports basic auth, custom timeout, SSL verification, and optional
+    SSRF protection via ``block_private_hosts`` (see config).
     """
 
-    __slots__ = (
-        "_auth",
-        "_follow_redirects",
-        "_name",
-        "_password",
-        "_timeout",
-        "_transport",
-        "_url",
-        "_username",
-        "_verify_ssl",
-    )
+    __slots__ = (*_CLIENT_CACHING_SLOTS, "_config", "_name")
 
-    _url: "URLTypes"
-    _username: str | None
-    _password: str | None
-    _auth: BasicAuth | None
-    _verify_ssl: bool
-    _transport: AsyncHTTPTransport | None
-    _follow_redirects: bool
-    _timeout: float
+    _config: UrlConfig
     _name: str
+    _client: AsyncClient | None
+    _client_loop: asyncio.AbstractEventLoop | None
 
-    def __init__(  # noqa: PLR0913, D417
+    @property
+    def _auth(self) -> BasicAuth | None:
+        c = self._config
+        return BasicAuth(c.username, c.password or "") if c.username else None
+
+    @property
+    def _transport(self) -> AsyncHTTPTransport:
+        return AsyncHTTPTransport(verify=self._config.verify_ssl)
+
+    @property
+    def _block_private_hosts(self) -> bool:
+        return self._config.block_private_hosts
+
+    def __init__(
         self,
         *,
-        url: "URLTypes",
-        username: str | None = None,
-        password: str | None = None,
-        verify_ssl: bool = True,
-        follow_redirects: bool = True,
-        timeout: float = DEFAULT_HC_TIMEOUT,
+        config: UrlConfig | None = None,
         name: str = "HTTP",
+        close_client_fn: Callable[[AsyncClient], Awaitable[None]] = _close_url_client,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
-        """Initializes the health check.
+        """Initialize the health check.
+
+        Warning:
+            Pass only trusted URLs from application configuration. Do not use
+            user-controlled input for ``url`` to avoid SSRF.
 
         Args:
-            url: The URL to connect to.
-            username: The user to authenticate with.
-            password: The password to authenticate with.
-            verify_ssl: Whether to verify the SSL certificate.
-            timeout: The timeout for the connection.
+            config: Connection config. If None, built from kwargs (url, username, etc.).
             name: The name of the health check.
+            close_client_fn: Callable to close the cached client.
+            **kwargs: Passed to UrlConfig when config is None (url required).
         """
-        self._url = url
-        self._username = username
-        self._password = password
-        self._auth = BasicAuth(self._username, self._password or "") if self._username else None
-        self._verify_ssl = verify_ssl
-        self._transport = AsyncHTTPTransport(verify=self._verify_ssl) if self._verify_ssl else None
-        self._follow_redirects = follow_redirects
-        self._timeout = timeout
+        if config is None:
+            kwargs = dict(kwargs)
+            if "url" in kwargs:
+                kwargs["url"] = str(kwargs["url"])
+            config = UrlConfig(**kwargs)
+        validate_url_ssrf(config.url, block_private_hosts=config.block_private_hosts)
+        self._config = config
         self._name = name
+        super().__init__(close_client_fn=close_client_fn)
 
+    def _create_client(self) -> AsyncClient:
+        c = self._config
+        transport = AsyncHTTPTransport(verify=c.verify_ssl)
+        return AsyncClient(
+            auth=self._auth,
+            timeout=c.timeout,
+            transport=transport,
+            follow_redirects=c.follow_redirects,
+        )
+
+    @healthcheck_safe(invalidate_on_error=True)
     async def __call__(self) -> HealthCheckResult:
-        """Performs the health check.
+        """Perform the health check.
+
+        When block_private_hosts is True, resolves the URL host before the request
+        and rejects if it resolves to loopback/private (SSRF/DNS rebinding protection).
 
         Returns:
-            A HealthCheckResult object with the result of the health check.
+            HealthCheckResult: Result with healthy=True if response is success.
         """
-        try:
-            async with AsyncClient(
-                auth=self._auth,
-                timeout=self._timeout,
-                transport=self._transport,
-                follow_redirects=self._follow_redirects,
-            ) as client:
-                response: Response = await client.get(self._url)
-                if response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR or (
-                    self._username and response.status_code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}
-                ):
-                    response.raise_for_status()
-                return HealthCheckResult(name=self._name, healthy=response.is_success)
-        except BaseException:  # noqa: BLE001
-            return HealthCheckResult(name=self._name, healthy=False, error_details=format_exc())
+        if self._config.block_private_hosts:
+            parsed = urlparse(self._config.url)
+            host = parsed.hostname or ""
+            await validate_host_ssrf_async(host)
+        client = await self._ensure_client()
+        response: Response = await client.get(self._config.url)
+        if response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR or (
+            self._config.username and response.status_code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}
+        ):
+            response.raise_for_status()
+        if response.is_success:
+            return HealthCheckResult(name=self._name, healthy=True)
+        return result_unhealthy_dependency(
+            name=self._name,
+            message=f"HTTP dependency returned status {response.status_code}",
+            meta={"status_code": response.status_code},
+        )

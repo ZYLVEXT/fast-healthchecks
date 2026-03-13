@@ -1,88 +1,106 @@
-"""This module provides a health check class for functions.
+"""Health check that runs a user-provided callable (sync or async).
 
-Classes:
-    FunctionHealthCheck: A class to perform health checks on a function.
-
-Usage:
-    The FunctionHealthCheck class can be used to perform health checks on a function by calling it.
-
-Example:
-    def my_function():
-        return True
-
-    health_check = FunctionHealthCheck(func=my_function)
-    result = await health_check()
-    print(result.healthy)
+FunctionHealthCheck runs the callable each time the check is executed; sync
+functions are run in a thread pool via run_in_executor.
 """
+
+from __future__ import annotations
 
 import asyncio
 import functools
-from collections.abc import Callable
-from traceback import format_exc
-from typing import Any, final
+import inspect
+from typing import TYPE_CHECKING, Any, final
 
-from fast_healthchecks.checks._base import DEFAULT_HC_TIMEOUT, HealthCheck
+from fast_healthchecks.checks._base import (
+    ConfigDictMixin,
+    HealthCheck,
+    healthcheck_safe,
+    result_unhealthy_dependency,
+)
+from fast_healthchecks.checks.configs import FunctionConfig
 from fast_healthchecks.models import HealthCheckResult
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from concurrent.futures import Executor
 
 
 @final
-class FunctionHealthCheck(HealthCheck[HealthCheckResult]):
-    """A class to perform health checks on a function.
+class FunctionHealthCheck(ConfigDictMixin, HealthCheck[HealthCheckResult]):
+    """Health check that runs a callable (sync or async) each time it is executed.
 
-    Attributes:
-        _args: The arguments to pass to the function.
-        _func: The function to perform the health check on.
-        _kwargs: The keyword arguments to pass to the function.
-        _name: The name of the health check.
-        _timeout: The timeout for the health check.
+    Synchronous functions are run via ``loop.run_in_executor(executor, ...)``.
+    The default executor is ``None`` (shared thread pool). Long-running blocking
+    sync checks can exhaust the pool; pass a dedicated :class:`Executor` if needed.
     """
 
-    __slots__ = ("_args", "_func", "_kwargs", "_name", "_timeout")
+    __slots__ = ("_config", "_executor", "_func", "_name")
 
+    _config: FunctionConfig
     _func: Callable[..., Any]
-    _args: tuple[Any, ...]
-    _kwargs: dict[str, Any]
-    _timeout: float
+    _executor: Executor | None
     _name: str
 
     def __init__(
         self,
         *,
-        func: Callable[..., Any],
-        args: tuple[Any, ...] = (),
-        kwargs: dict[str, Any] | None = None,
-        timeout: float = DEFAULT_HC_TIMEOUT,
+        config: FunctionConfig | None = None,
+        func: Callable[..., Any] | None = None,
         name: str = "Function",
+        executor: Executor | None = None,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
-        """Initializes the FunctionHealthCheck class.
+        """Initialize the FunctionHealthCheck.
 
         Args:
-            func: The function to perform the health check on.
-            args: The arguments to pass to the function.
-            kwargs: The keyword arguments to pass to the function.
-            timeout: The timeout for the health check.
+            config: Config (args, kwargs, timeout). If None, built from kwargs.
+            func: The function to perform the health check on (required if config is None).
             name: The name of the health check.
+            executor: Executor for sync functions. Defaults to None (thread pool).
+            **kwargs: Passed to FunctionConfig when config is None (args, kwargs, timeout).
+
+        Raises:
+            TypeError: When func is not provided.
         """
+        if config is None:
+            kwargs_copy = dict(kwargs)
+            func = kwargs_copy.pop("func", func)
+            executor = kwargs_copy.pop("executor", executor)
+            if func is None:
+                msg = "func is required when config is not provided"
+                raise TypeError(msg)
+            config = FunctionConfig(**kwargs_copy)
+        elif func is None:
+            msg = "func is required"
+            raise TypeError(msg)
+        self._config = config
         self._func = func
-        self._args = args or ()
-        self._kwargs = kwargs or {}
-        self._timeout = timeout
+        self._executor = executor
         self._name = name
 
+    @healthcheck_safe(invalidate_on_error=False)
     async def __call__(self) -> HealthCheckResult:
-        """Performs the health check on the function.
+        """Perform the health check on the function.
+
+        Sync functions run in the given executor (default: shared thread pool).
 
         Returns:
-            A HealthCheckResult object.
+            HealthCheckResult: The result of the health check.
         """
-        try:
-            task: asyncio.Future[Any]
-            if asyncio.iscoroutinefunction(self._func):
-                task = self._func(*self._args, **self._kwargs)
-            else:
-                loop = asyncio.get_event_loop()
-                task = loop.run_in_executor(None, functools.partial(self._func, *self._args, **self._kwargs))
-            await asyncio.wait_for(task, timeout=self._timeout)
+        c = self._config
+        args = c.args or ()
+        kwargs = dict(c.kwargs) if c.kwargs else {}
+        task: asyncio.Future[Any]
+        if inspect.iscoroutinefunction(self._func):
+            task = self._func(*args, **kwargs)
+        else:
+            loop = asyncio.get_running_loop()
+            task = loop.run_in_executor(
+                self._executor,
+                functools.partial(self._func, *args, **kwargs),
+            )
+        result = await asyncio.wait_for(task, timeout=c.timeout)
+        healthy = bool(result) if isinstance(result, bool) else True
+        if healthy:
             return HealthCheckResult(name=self._name, healthy=True)
-        except BaseException:  # noqa: BLE001
-            return HealthCheckResult(name=self._name, healthy=False, error_details=format_exc())
+        return result_unhealthy_dependency(name=self._name, message="Function returned unhealthy status")
