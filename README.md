@@ -21,7 +21,7 @@
   </a>
 
   <a href="https://pypi.org/project/fast-healthchecks" target="_blank">
-    <img src="https://img.shields.io/pypi/v/fast-healthchecks?label=PyPI" alt="Package version"/>
+    <img src="https://img.shields.io/pypi/v/fast-healthchecks.svg?label=PyPI" alt="Package version"/>
   </a>
 
   <a href="https://pypi.org/project/fast-healthchecks" target="_blank">
@@ -29,11 +29,11 @@
   </a>
 
   <a href="https://github.com/ZYLVEXT/fast-healthchecks/blob/main/LICENSE" target="_blank">
-    <img src="https://img.shields.io/github/license/ZYLVEXT/fast-healthchecks.png" alt="License"/>
+    <img src="https://img.shields.io/github/license/ZYLVEXT/fast-healthchecks.svg" alt="License"/>
   </a>
 
   <a href="https://zylvext.github.io/fast-healthchecks/" target="_blank">
-    <img src="https://img.shields.io/badge/docs-online-green" alt="Documentation"/>
+    <img src="https://img.shields.io/badge/docs-online-green.svg" alt="Documentation"/>
   </a>
 
 </p>
