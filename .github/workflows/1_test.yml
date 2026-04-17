@@ -64,7 +64,7 @@ jobs:
       # restore-keys restores the latest cache for this prefix; uv sync fixes deps if needed.
       # See: https://github.com/actions/cache/blob/main/tips-and-workarounds.md#update-a-cache
       - name: Restore .venv cache (pre-commit)
-        uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: .venv
           key: venv-precommit-${{ env.VENV_PRECOMMIT_CACHE_VERSION }}-${{ runner.os }}-3.10-${{ github.run_id }}
@@ -75,7 +75,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Save .venv cache (pre-commit)
-        uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: .venv
           key: venv-precommit-${{ env.VENV_PRECOMMIT_CACHE_VERSION }}-${{ runner.os }}-3.10-${{ github.run_id }}
@@ -147,7 +147,7 @@ jobs:
       # restore-keys: if exact key misses, use latest cache (hashFiles is consistent across Windows/Ubuntu for this repo).
       - name: Restore Docker Compose images
         id: restore_compose_cache
-        uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: ${{ env.COMPOSE_CACHE_PATH }}
           key: compose-images-${{ env.COMPOSE_CACHE_VERSION }}-${{ hashFiles('docker-compose.yml', '.env.example') }}
@@ -308,7 +308,7 @@ jobs:
 
       - name: Cache Docker Compose images
         if: runner.os == 'Linux' && matrix.python-version == '3.14' && steps.restore_compose_cache.outputs.cache-hit != 'true' && steps.docker_cache_size.outcome == 'success' && steps.docker_cache_size.outputs.valid == 'true' && always()
-        uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         continue-on-error: true
         with:
           path: ${{ env.COMPOSE_CACHE_PATH }}
