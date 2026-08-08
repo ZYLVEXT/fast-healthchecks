@@ -61,6 +61,22 @@ def test_healthcheck_result_asdict_and_eq() -> None:
     )
 
 
+def test_health_error_redacts_nested_secret_metadata_on_creation() -> None:
+    """HealthError never retains documented secret-like metadata values."""
+    source: dict[str, object] = {
+        "DatabasePassword": "db-secret",
+        "nested": {"API_KEY": "key", "clientCredentialId": "credential", "safe": "value"},
+    }
+
+    error = HealthError(code="CHECK_EXCEPTION", message="failed", meta=source)
+
+    assert error.meta == {
+        "DatabasePassword": "***",
+        "nested": {"API_KEY": "***", "clientCredentialId": "***", "safe": "value"},
+    }
+    assert source["DatabasePassword"] == "db-secret"
+
+
 def test_healthcheck_report() -> None:
     """HealthCheckReport.healthy is True when all results healthy (or partial allowed)."""
     hcr = HealthCheckReport(

@@ -13,8 +13,6 @@ from urllib.parse import ParseResult, SplitResult
 ParsedUrl: TypeAlias = ParseResult | SplitResult
 
 if TYPE_CHECKING:
-    import ssl
-
     from redis.asyncio.connection import ConnectKwargs
 
 __all__ = (
@@ -79,5 +77,5 @@ class PostgresParseDsnResult(TypedDict, total=True):
     sslcert: str | None
     sslkey: str | None
     sslrootcert: str | None
-    sslctx: ssl.SSLContext | None
+    sslctx: SslMode
     direct_tls: bool

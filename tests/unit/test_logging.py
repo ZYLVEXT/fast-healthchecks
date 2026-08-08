@@ -1,5 +1,6 @@
 """Tests for optional probe logging (OBS-1)."""
 
+import asyncio
 import logging
 
 import pytest
@@ -12,11 +13,24 @@ from fast_healthchecks.logging import (
     get_stdlib_probe_logger,
     set_probe_logger,
 )
+from fast_healthchecks.models import HealthCheckResult
 from fast_healthchecks.utils import REDACT_PLACEHOLDER, redact_secrets_in_dict
 
 pytestmark = pytest.mark.unit
 
 _MIN_PROBE_LOG_RECORDS = 2
+
+
+class _CollectingHandler(logging.Handler):
+    """Collect emitted records without replacing a typed method at runtime."""
+
+    def __init__(self, records: list[logging.LogRecord]) -> None:
+        super().__init__()
+        self._records = records
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Append one emitted record."""
+        self._records.append(record)
 
 
 def test_default_logger_is_null_logger() -> None:
@@ -46,8 +60,7 @@ async def test_when_logging_disabled_handler_receives_zero_records() -> None:
     # Attach handler to stdlib logger that would be used if we enabled it
     stdlib_logger = logging.getLogger("fast_healthchecks.probe")
     records: list[logging.LogRecord] = []
-    handler = logging.Handler()
-    handler.emit = lambda r: records.append(r)  # type: ignore[method-assign]  # noqa: PLW0108
+    handler = _CollectingHandler(records)
     stdlib_logger.addHandler(handler)
     stdlib_logger.setLevel(logging.DEBUG)
     try:
@@ -69,8 +82,7 @@ async def test_when_logging_enabled_probe_start_and_end_logged() -> None:
     records: list[logging.LogRecord] = []
     logger = logging.getLogger("fast_healthchecks.probe.test_enabled")
     logger.setLevel(logging.DEBUG)
-    handler = logging.Handler()
-    handler.emit = lambda r: records.append(r)  # type: ignore[method-assign]  # noqa: PLW0108
+    handler = _CollectingHandler(records)
     logger.addHandler(handler)
     try:
         set_probe_logger(get_stdlib_probe_logger("fast_healthchecks.probe.test_enabled"))
@@ -88,14 +100,42 @@ async def test_when_logging_enabled_probe_start_and_end_logged() -> None:
         set_probe_logger(NullLogger())
 
 
+@pytest.mark.asyncio
+async def test_when_logging_enabled_check_exception_is_logged() -> None:
+    """A check exception emits a failed check_end record without escaping."""
+
+    async def _failing_check() -> HealthCheckResult:
+        await asyncio.sleep(0)
+        msg = "dependency failed"
+        raise RuntimeError(msg)
+
+    records: list[logging.LogRecord] = []
+    log_name = "fast_healthchecks.probe.test_failure"
+    logger = logging.getLogger(log_name)
+    logger.setLevel(logging.DEBUG)
+    handler = _CollectingHandler(records)
+    logger.addHandler(handler)
+    try:
+        set_probe_logger(get_stdlib_probe_logger(log_name))
+        report = await run_probe(Probe(name="p", checks=[_failing_check]))
+
+        assert report.healthy is False
+        failed_check_records = [
+            record for record in records if record.msg == "check_end" and getattr(record, "healthy", None) is False
+        ]
+        assert len(failed_check_records) == 1
+    finally:
+        logger.removeHandler(handler)
+        set_probe_logger(NullLogger())
+
+
 def test_stdlib_logger_redacts_extra() -> None:
     """Stdlib probe logger redacts secret keys in extra (same as DOC-3)."""
     log_name = "fast_healthchecks.probe.test_redact"
     logger = get_stdlib_probe_logger(log_name)
     stdlib_logger = logging.getLogger(log_name)
     records: list[logging.LogRecord] = []
-    h = logging.Handler()
-    h.emit = lambda r: records.append(r)  # type: ignore[method-assign]  # noqa: PLW0108
+    h = _CollectingHandler(records)
     stdlib_logger.addHandler(h)
     stdlib_logger.setLevel(logging.DEBUG)
     try:
@@ -113,8 +153,7 @@ def test_stdlib_logger_redacts_nested_meta() -> None:
     logger = get_stdlib_probe_logger(log_name)
     stdlib_logger = logging.getLogger(log_name)
     records: list[logging.LogRecord] = []
-    h = logging.Handler()
-    h.emit = lambda r: records.append(r)  # type: ignore[method-assign]  # noqa: PLW0108
+    h = _CollectingHandler(records)
     stdlib_logger.addHandler(h)
     stdlib_logger.setLevel(logging.DEBUG)
     try:

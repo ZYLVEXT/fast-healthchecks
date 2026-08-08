@@ -2,9 +2,9 @@ services:
 
   postgres:
     container_name: dev_fast_healthchecks_postgres
-    image: postgres:17-alpine
+    image: ${POSTGRES_IMAGE:-postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}
     platform: ${DOCKER_PLATFORM:-linux/amd64}
-    ports: ['${POSTGRES_PORT}:5432']
+    ports: ['${POSTGRES_PORT:-5432}:5432']
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -18,10 +18,10 @@ services:
 
   redis:
     container_name: dev_fast_healthchecks_redis
-    image: redis:8-alpine
+    image: ${REDIS_IMAGE:-redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241}
     platform: ${DOCKER_PLATFORM:-linux/amd64}
     restart: on-failure
-    ports: ['6379:6379']
+    ports: ['${REDIS_PORT:-6379}:6379']
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -34,11 +34,11 @@ services:
 
   rabbitmq:
     container_name: dev_fast_healthchecks_rabbitmq
-    image: rabbitmq:4-alpine
+    image: ${RABBITMQ_IMAGE:-rabbitmq:4.3.4-alpine@sha256:a762c02d0c1fa7c3de1eca5d62b4fe9812649f41a3b38d716e1afcbe7e5387ad}
     platform: ${DOCKER_PLATFORM:-linux/amd64}
     restart: always
     ports:
-      - '${RABBITMQ_PORT}:5672'
+      - '${RABBITMQ_PORT:-5672}:5672'
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
@@ -52,11 +52,11 @@ services:
 
   zookeeper:
     container_name: dev_fast_healthchecks_zookeeper
-    image: confluentinc/cp-zookeeper:7.9.2
+    image: ${ZOOKEEPER_IMAGE:-confluentinc/cp-zookeeper:7.9.2@sha256:c03f6fe4af97d57c42518b8deaf2753ed338ee414812f258f9cf32c977fe0a53}
     platform: ${DOCKER_PLATFORM:-linux/amd64}
     hostname: zookeeper
     ports:
-      - "2181:2181"
+      - "${ZOOKEEPER_PORT:-2181}:2181"
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -70,18 +70,18 @@ services:
 
   kafka1:
     container_name: dev_fast_healthchecks_kafka1
-    image: confluentinc/cp-kafka:7.9.2
+    image: ${KAFKA_IMAGE:-confluentinc/cp-kafka:7.9.2@sha256:ecd1ce3c902fb5cfa7fc34881215f1a3e1abdcba5d0d9bbe6b0385ff6425e05c}
     platform: ${DOCKER_PLATFORM:-linux/amd64}
     hostname: kafka1
     depends_on:
       zookeeper:
         condition: service_healthy
     ports:
-      - "9094:9094"
+      - "${KAFKA1_PORT:-9094}:${KAFKA1_PORT:-9094}"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:9092,OUTSIDE://localhost:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:9092,OUTSIDE://localhost:${KAFKA1_PORT:-9094}
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,OUTSIDE:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
     healthcheck:
@@ -93,18 +93,18 @@ services:
 
   kafka2:
     container_name: dev_fast_healthchecks_kafka2
-    image: confluentinc/cp-kafka:7.9.2
+    image: ${KAFKA_IMAGE:-confluentinc/cp-kafka:7.9.2@sha256:ecd1ce3c902fb5cfa7fc34881215f1a3e1abdcba5d0d9bbe6b0385ff6425e05c}
     platform: ${DOCKER_PLATFORM:-linux/amd64}
     hostname: kafka2
     depends_on:
       zookeeper:
         condition: service_healthy
     ports:
-      - "9095:9095"
+      - "${KAFKA2_PORT:-9095}:${KAFKA2_PORT:-9095}"
     environment:
       KAFKA_BROKER_ID: 2
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka2:9093,OUTSIDE://localhost:9095
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka2:9093,OUTSIDE://localhost:${KAFKA2_PORT:-9095}
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,OUTSIDE:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
     healthcheck:
@@ -116,7 +116,7 @@ services:
 
   mongo:
     container_name: dev_fast_healthchecks_mongo
-    image: mongo:8
+    image: ${MONGO_IMAGE:-mongo:8.2.12@sha256:e0ce8c35124d4a9f9785532d1f268f39e9728ffa1cb38f46fa482436424c4bd3}
     platform: ${DOCKER_PLATFORM:-linux/amd64}
     restart: always
     environment:
@@ -124,7 +124,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
     ports:
-      - "${MONGO_PORT}:27017"
+      - "${MONGO_PORT:-27017}:27017"
     healthcheck:
       test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
       interval: 5s
@@ -134,7 +134,7 @@ services:
 
   opensearch:
     container_name: dev_fast_healthchecks_opensearch
-    image: opensearchproject/opensearch
+    image: ${OPENSEARCH_IMAGE:-opensearchproject/opensearch:3.8.0@sha256:bcc1797519726ceb6d651d4a3e60b7c30da91793914a8dfe75fd441d4f641509}
     platform: ${DOCKER_PLATFORM:-linux/amd64}
     environment:
       - discovery.type=single-node # Single node discovery
@@ -150,8 +150,8 @@ services:
         soft: 65536 # Maximum number of open files for the opensearch user - set to at least 65536
         hard: 65536
     ports:
-      - 9200:9200 # REST API
-      - 9600:9600 # Performance Analyzer
+      - "${OPENSEARCH_PORT:-9200}:9200" # REST API
+      - "${OPENSEARCH_PERFORMANCE_PORT:-9600}:9600" # Performance Analyzer
     healthcheck:
       test: ['CMD-SHELL', 'curl -sf http://localhost:9200/_cluster/health || exit 1']
       interval: 10s

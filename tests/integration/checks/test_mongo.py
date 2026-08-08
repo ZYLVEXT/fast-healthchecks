@@ -46,7 +46,7 @@ async def test_mongo_check_connection_error(mongo_config: dict[str, Any]) -> Non
     """Mongo check returns unhealthy with error_details on connection error."""
     check = MongoHealthCheck(
         hosts=mongo_config["hosts"],
-        port=27018,
+        port=1,
         user=mongo_config["user"],
         password=mongo_config["password"],
         database=mongo_config["database"],

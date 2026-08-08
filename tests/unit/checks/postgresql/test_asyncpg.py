@@ -444,18 +444,8 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
         (
             (f"postgresql+asyncpg://postgres:pass@localhost:5432/db?sslmode=prefer&sslcert={TEST_SSLCERT}",),
             {},
-            {
-                "database": "db",
-                "direct_tls": False,
-                "host": "localhost",
-                "password": "pass",
-                "port": 5432,
-                "ssl": ("prefer", unquote(TEST_SSLCERT), None, None),
-                "user": "postgres",
-                "timeout": 5.0,
-                "name": "PostgreSQL",
-            },
-            None,
+            "\\[SSL\\] PEM lib \\(_ssl.c:\\d+\\)",
+            ssl.SSLError,
         ),
         (
             (
@@ -512,18 +502,8 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
         (
             (f"postgresql+asyncpg://postgres:pass@localhost:5432/db?sslmode=require&sslcert={TEST_SSLCERT}",),
             {},
-            {
-                "database": "db",
-                "direct_tls": False,
-                "host": "localhost",
-                "password": "pass",
-                "port": 5432,
-                "ssl": ("require", unquote(TEST_SSLCERT), None, None),
-                "user": "postgres",
-                "timeout": 5.0,
-                "name": "PostgreSQL",
-            },
-            None,
+            "\\[SSL\\] PEM lib \\(_ssl.c:\\d+\\)",
+            ssl.SSLError,
         ),
         (
             (
@@ -580,18 +560,8 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
         (
             (f"postgresql+asyncpg://postgres:pass@localhost:5432/db?sslmode=verify-ca&sslcert={TEST_SSLCERT}",),
             {},
-            {
-                "database": "db",
-                "direct_tls": False,
-                "host": "localhost",
-                "password": "pass",
-                "port": 5432,
-                "ssl": ("verify-ca", unquote(TEST_SSLCERT), None, None),
-                "user": "postgres",
-                "timeout": 5.0,
-                "name": "PostgreSQL",
-            },
-            None,
+            "\\[SSL\\] PEM lib \\(_ssl.c:\\d+\\)",
+            ssl.SSLError,
         ),
         (
             (
@@ -632,8 +602,18 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
         (
             ("postgresql+asyncpg://postgres:pass@localhost:5432/db?sslmode=verify-full",),
             {},
-            "sslcert is required for verify-full",
-            ValueError,
+            {
+                "database": "db",
+                "direct_tls": False,
+                "host": "localhost",
+                "password": "pass",
+                "port": 5432,
+                "ssl": "verify-full",
+                "user": "postgres",
+                "timeout": 5.0,
+                "name": "PostgreSQL",
+            },
+            None,
         ),
         (
             (f"postgresql+asyncpg://postgres:pass@localhost:5432/db?sslmode=verify-full&sslcert={TEST_SSLCERT}",),
@@ -731,8 +711,15 @@ def test_from_dsn(
     query = parse_query_string(parse_result.query)
     files = [y for x, y in query.items() if x in {"sslcert", "sslkey", "sslrootcert"}]
     with create_temp_files(files):
-        if exception is None and isinstance(expected, dict) and "ssl" in expected and expected["ssl"] is not None:
-            expected["ssl"] = create_ssl_context(*expected["ssl"])
+        if exception is None and isinstance(expected, dict) and "ssl" in expected:
+            expected_ssl = expected["ssl"]
+            if isinstance(expected_ssl, tuple):
+                mode, cert, key, root = expected_ssl
+                expected["ssl"] = (
+                    mode if cert is None and key is None and root is None else create_ssl_context(*expected_ssl)
+                )
+            elif expected_ssl is None:
+                expected["ssl"] = query.get("sslmode", "disable")
         assert_check_init(lambda: PostgreSQLAsyncPGHealthCheck.from_dsn(*args, **kwargs), expected, exception)
 
 

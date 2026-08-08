@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any
 from fast_healthchecks.checks._base import DEFAULT_HC_TIMEOUT, healthcheck_safe, result_unhealthy_dependency
 from fast_healthchecks.checks._imports import raise_optional_import_error
 from fast_healthchecks.checks.configs import PostgresAsyncPGConfig
-from fast_healthchecks.checks.postgresql.base import BasePostgreSQLHealthCheck
+from fast_healthchecks.checks.postgresql.base import BasePostgreSQLHealthCheck, create_ssl_context
 from fast_healthchecks.models import HealthCheckResult
 
 try:
@@ -69,7 +69,7 @@ class PostgreSQLAsyncPGHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
         *,
         config: PostgresAsyncPGConfig | None = None,
         name: str = "PostgreSQL",
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         """Initialize the PostgreSQLAsyncPGHealthCheck.
 
@@ -86,14 +86,22 @@ class PostgreSQLAsyncPGHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
     @classmethod
     def _from_parsed_dsn(
         cls,
-        parsed: "PostgresParseDsnResult",  # noqa: UP037
+        parsed: "PostgresParseDsnResult",  # ruff: ignore[quoted-annotation]
         *,
         name: str = "PostgreSQL",
         timeout: float = DEFAULT_HC_TIMEOUT,
         **_kwargs: object,
     ) -> PostgreSQLAsyncPGHealthCheck:
         parse_result = parsed["parse_result"]
-        sslctx = parsed["sslctx"]
+        sslmode = parsed["sslctx"]
+        sslcert = parsed["sslcert"]
+        sslkey = parsed["sslkey"]
+        sslrootcert = parsed["sslrootcert"]
+        if sslcert is None and sslkey is None and sslrootcert is None:
+            sslctx = sslmode
+        else:
+            context = create_ssl_context(sslmode, sslcert, sslkey, sslrootcert)
+            sslctx = context if context is not None else sslmode
         config = PostgresAsyncPGConfig(
             host=parse_result.hostname or "localhost",
             port=parse_result.port or 5432,

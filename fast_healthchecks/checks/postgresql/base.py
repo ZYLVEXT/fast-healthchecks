@@ -55,18 +55,19 @@ def create_ssl_context(
             sslctx.check_hostname = False
             sslctx.verify_mode = ssl.CERT_REQUIRED
         case "verify-full":
-            if sslcert is None:
-                msg = "sslcert is required for verify-full"
-                raise ValueError(msg) from None
             sslctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=sslrootcert)
             sslctx.check_hostname = True
-            sslctx.load_cert_chain(
-                certfile=sslcert,
-                keyfile=sslkey,
-            )
         case _:  # pragma: no cover
             msg = f"Unsupported sslmode: {sslmode}"
             raise ValueError(msg) from None
+    if sslkey is not None and sslcert is None:
+        msg = "sslkey requires sslcert"
+        raise ValueError(msg)
+    if sslctx is not None and sslcert is not None:
+        sslctx.load_cert_chain(
+            certfile=sslcert,
+            keyfile=sslkey,
+        )
     return sslctx
 
 
@@ -121,6 +122,9 @@ class BasePostgreSQLHealthCheck(HealthCheckDSN[T_co, PostgresParseDsnResult], Ge
 
         Returns:
             PostgresParseDsnResult: The results of parsing the DSN.
+
+        Raises:
+            ValueError: If the SSL mode or client certificate/key combination is invalid.
         """
         parse_result: SplitResult = urlsplit(dsn)
         query = parse_query_string(parse_result.query)
@@ -131,7 +135,9 @@ class BasePostgreSQLHealthCheck(HealthCheckDSN[T_co, PostgresParseDsnResult], Ge
         sslcert = unquote(sslcert_raw) if sslcert_raw else None
         sslkey = unquote(sslkey_raw) if sslkey_raw else None
         sslrootcert = unquote(sslrootcert_raw) if sslrootcert_raw else None
-        sslctx: ssl.SSLContext | None = create_ssl_context(sslmode, sslcert, sslkey, sslrootcert)
+        if sslkey is not None and sslcert is None:
+            msg = "sslkey requires sslcert"
+            raise ValueError(msg)
         direct_tls_raw: str = query.get("direct_tls", "").lower()
         direct_tls: bool = direct_tls_raw in {"1", "true", "yes", "on"}
         return {
@@ -140,6 +146,6 @@ class BasePostgreSQLHealthCheck(HealthCheckDSN[T_co, PostgresParseDsnResult], Ge
             "sslcert": sslcert,
             "sslkey": sslkey,
             "sslrootcert": sslrootcert,
-            "sslctx": sslctx,
+            "sslctx": sslmode,
             "direct_tls": direct_tls,
         }

@@ -77,7 +77,7 @@ Usage depends on the framework (FastAPI: `HealthcheckRouter`; FastStream / Lites
 
 - **Configuration, shutdown, probe options:** [documentation](https://zylvext.github.io/fast-healthchecks/).
 - **Public API and `to_dict()`:** [API Reference](https://zylvext.github.io/fast-healthchecks/api/).
-- **PostgreSQL TLS certificate rotation:** [DSN formats](https://zylvext.github.io/fast-healthchecks/dsn-formats/#postgresql-tls-certificate-rotation).
+- **PostgreSQL TLS and certificate rotation:** [DSN formats](https://zylvext.github.io/fast-healthchecks/dsn-formats/#postgresql-tls).
 
 ## Probe Runner (Advanced)
 
@@ -134,12 +134,12 @@ just lint
 
 - **Import tests:** `just tests-imports` — verifies ImportError messages when optional deps are missing; runs with minimal install (`uv sync --group=dev` only, no extras).
 - **Unit tests:** `just tests-unit` — runs pytest with `-m unit`. Expects dev deps and optional extras already installed (e.g. after `uv sync --group=dev --all-extras` or after `just tests-integration`). FastStream unit tests use `TestKafkaBroker(connect_only=True)` and `TestApp` so no real Kafka is required.
-- **Integration tests:** `just tests-integration` — requires Docker and `docker compose`; brings services up, runs integration tests, then brings them down. Set `DOCKER_SERVICES_UP=1` to skip compose up/down when services are already running.
+- **Integration tests:** `just tests-integration` — requires Docker and `docker compose`; brings services up, runs integration tests, then brings them down. Copy `.env.example` to `.env` and override the service ports and matching DSNs there when the defaults are already in use. Set `DOCKER_SERVICES_UP=1` to skip compose up/down when services are already running.
 - **Full suite:** `just tests-all` — runs import tests, then integration (compose up, pytest integration, compose down), then unit tests. Requires Docker.
 
 Certificates in `tests/certs/` are for tests only; see CONTRIBUTING § Test certificates.
 
-CI runs pre-commit, import tests, and unit tests on push/PR; integration tests run only on manual workflow dispatch or schedule.
+CI runs prek and the complete import, integration, and unit test suite on pushes to `main`, pull requests, version tags, and manual workflow dispatches.
 
 ### Serve documentation
 
@@ -149,7 +149,7 @@ just serve-docs
 
 ### Release and CI (maintainers)
 
-Bump, rollback, workflows, secrets, pre-commit, and dependency updates: see [CONTRIBUTING § CI and release](CONTRIBUTING.md#ci-and-release) and the [workflows table](CONTRIBUTING.md#workflows) there. Quick links: [Bump version](https://github.com/ZYLVEXT/fast-healthchecks/actions/workflows/2_bump.yml), [Rollback release](https://github.com/ZYLVEXT/fast-healthchecks/actions/workflows/2_rollback.yml).
+Bump, rollback, workflows, secrets, prek, and dependency updates: see [CONTRIBUTING § CI and release](CONTRIBUTING.md#ci-and-release) and the [workflows table](CONTRIBUTING.md#workflows) there. Quick links: [Bump version](https://github.com/ZYLVEXT/fast-healthchecks/actions/workflows/2_bump.yml), [Rollback release](https://github.com/ZYLVEXT/fast-healthchecks/actions/workflows/2_rollback.yml).
 
 ## Known alternatives
 

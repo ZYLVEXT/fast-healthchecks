@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 
-from fast_healthchecks.checks._base import healthcheck_safe, result_on_error  # noqa: PLC2701
+from fast_healthchecks.checks._base import healthcheck_safe, result_on_error  # ruff: ignore[import-private-name]
 from fast_healthchecks.checks.kafka import KafkaHealthCheck
 from fast_healthchecks.checks.mongo import MongoHealthCheck
 from fast_healthchecks.checks.opensearch import OpenSearchHealthCheck
@@ -153,6 +153,13 @@ class _CheckWithName:
     _name = "SafeCheck"
 
 
+class _CheckWithSyncInvalidator(_CheckWithName):
+    invalidated = False
+
+    def _invalidate_client(self) -> None:
+        self.invalidated = True
+
+
 @pytest.mark.asyncio
 async def test_healthcheck_safe_cancelled_error_propagates() -> None:
     """healthcheck_safe re-raises CancelledError; never wraps in HealthCheckResult."""
@@ -185,6 +192,22 @@ async def test_healthcheck_safe_exception_returns_result() -> None:
     assert "ValueError" in result.error.message
 
 
+@pytest.mark.asyncio
+async def test_healthcheck_safe_invalidation_is_optional() -> None:
+    """Invalidation handles checks without a hook and synchronous hooks."""
+
+    @healthcheck_safe(invalidate_on_error=True)
+    async def raises_value_error(self: _CheckWithName) -> HealthCheckResult:
+        await asyncio.sleep(0)
+        msg = "expected failure"
+        raise ValueError(msg)
+
+    assert (await raises_value_error(_CheckWithName())).healthy is False
+    check = _CheckWithSyncInvalidator()
+    assert (await raises_value_error(check)).healthy is False
+    assert check.invalidated is True
+
+
 def test_result_on_error_with_exception() -> None:
     """result_on_error wraps provided exception in HealthCheckResult."""
     exc = ValueError("test error")
@@ -200,7 +223,7 @@ def test_result_on_error_without_exception() -> None:
     """result_on_error captures current exception when exc is None."""
 
     def _raise_error() -> None:
-        raise ValueError("captured error")  # noqa: TRY003, EM101
+        raise ValueError("captured error")  # ruff: ignore[raise-vanilla-args, raw-string-in-exception]
 
     result = HealthCheckResult(name="", healthy=True)
     try:

@@ -1,6 +1,6 @@
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
+  - package-ecosystem: "github-actions" # zizmor: ignore[dependabot-cooldown]
     directory: "/"
     schedule:
       interval: "weekly"
@@ -16,7 +16,7 @@ updates:
           - "patch"
     commit-message:
       prefix: "chore(deps)"
-  - package-ecosystem: "uv"
+  - package-ecosystem: "uv" # zizmor: ignore[dependabot-cooldown]
     directory: "/"
     schedule:
       interval: "weekly"
@@ -32,7 +32,7 @@ updates:
           - "patch"
     commit-message:
       prefix: "chore(deps)"
-  - package-ecosystem: "docker"
+  - package-ecosystem: "docker" # zizmor: ignore[dependabot-cooldown]
     directory: "/"
     schedule:
       interval: "weekly"

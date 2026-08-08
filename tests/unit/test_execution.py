@@ -38,7 +38,7 @@ def test_run_policy_is_immutable() -> None:
     """RunPolicy is frozen and disallows mutation."""
     policy = RunPolicy()
     with pytest.raises(FrozenInstanceError):
-        policy.mode = "reporting"  # type: ignore[misc]
+        policy.mode = "reporting"  # ty: ignore[invalid-assignment]
 
 
 @pytest.mark.parametrize(
@@ -176,7 +176,7 @@ def test_probe_runner_is_immutable() -> None:
     """ProbeRunner is frozen and disallows mutation."""
     runner = ProbeRunner()
     with pytest.raises(FrozenInstanceError):
-        runner.policy = RunPolicy(mode="reporting")  # type: ignore[misc]
+        runner.policy = RunPolicy(mode="reporting")  # ty: ignore[invalid-assignment]
 
 
 @pytest.mark.asyncio
@@ -190,6 +190,35 @@ async def test_probe_runner_close_closes_aclose_compatible_checks() -> None:
     await runner.close()
 
     check._aclose_mock.assert_awaited_once_with()
+    assert runner._resource_checks == []
+    assert runner._resource_check_ids == set()
+
+
+@pytest.mark.asyncio
+async def test_probe_runner_registers_each_probe_once() -> None:
+    """Repeated runs do not duplicate a probe in lifecycle management."""
+    check = CheckWithAclose(name="A")
+    probe = Probe(name="ready", checks=[check])
+    runner = ProbeRunner()
+
+    await runner.run(probe)
+    await runner.run(probe)
+    await runner.close()
+
+    check._aclose_mock.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_probe_runner_does_not_retain_stateless_probes() -> None:
+    """Stateless checks do not become lifecycle-owned objects."""
+    probe = Probe(name="ready", checks=[FunctionHealthCheck(func=lambda: True)])
+    runner = ProbeRunner()
+
+    await runner.run(probe)
+    await runner.close()
+
+    assert runner._resource_checks == []
+    assert runner._resource_check_ids == set()
 
 
 @pytest.mark.asyncio

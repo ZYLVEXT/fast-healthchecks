@@ -81,7 +81,7 @@ class KafkaHealthCheck(
         config: KafkaConfig | None = None,
         name: str = "Kafka",
         close_client_fn: Callable[[AIOKafkaAdminClient], Awaitable[None]] = _close_kafka_client,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         """Initialize the KafkaHealthCheck.
 
@@ -201,6 +201,6 @@ class KafkaHealthCheck(
         if not getattr(client, "_started", False):  # pragma: no branch
             await client.start()
             with contextlib.suppress(AttributeError):
-                client._started = True  # noqa: SLF001
+                client._started = True  # ruff: ignore[private-member-access]
         await client.list_topics()
         return HealthCheckResult(name=self._name, healthy=True)

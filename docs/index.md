@@ -6,7 +6,7 @@ Framework-agnostic health checks with integrations for the most popular ASGI fra
 
 - [Installation](installation.md) — install with pip, poetry, or uv; optional extras.
 - [Usage](usage.md) — mount health checks per framework; examples (FastAPI, FastStream, Litestar).
-- [Lifecycle and shutdown](lifecycle.md) — closing cached clients on app shutdown; [ProbeRunner](lifecycle.md#probe-runner-advanced) for advanced control.
+- [Lifecycle and shutdown](lifecycle.md) — closing cached clients on app shutdown; [ProbeRunner](lifecycle.md#proberunner-advanced) for advanced control.
 - [Probe options](probe-options.md) — probe parameters and `build_probe_route_options`.
 - [Running probes without ASGI](run-probe.md) — `run_probe` for CLI, cron, tests.
 - [Configuration objects](configuration.md) — `config` argument and types in `fast_healthchecks.checks.configs`.
@@ -20,5 +20,5 @@ For API reference (configs, check classes, public API boundary), see [API Refere
 - [Changelog](changelog.md) — release history and changes.
 - [Style guide](style-guide.md) — code style conventions.
 - [Contributing](contributing.md) — how to contribute to the project.
-- [Security](security.md) — security policy and guidelines.
+- [Security](SECURITY.md) — security policy and guidelines.
 - [Decisions](decisions/README.md) — architectural decision records.

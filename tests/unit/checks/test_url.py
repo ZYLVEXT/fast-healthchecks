@@ -6,8 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from httpx import AsyncClient, Response
+from httpx import AsyncClient, Request, Response
 
+from fast_healthchecks.checks.configs import UrlConfig
 from fast_healthchecks.checks.url import UrlHealthCheck
 from fast_healthchecks.errors import DEPENDENCY_UNHEALTHY
 from fast_healthchecks.models import HealthCheckResult
@@ -288,6 +289,19 @@ def test_url_health_check_rejects_file_scheme() -> None:
         UrlHealthCheck(url="file:///etc/passwd")
 
 
+def test_url_health_check_rejects_missing_url() -> None:
+    """UrlHealthCheck rejects construction without a URL."""
+    with pytest.raises(ValueError, match=r"URL scheme must be one of"):
+        UrlHealthCheck()
+
+
+def test_url_health_check_accepts_explicit_config() -> None:
+    """An explicit URL config bypasses keyword config construction."""
+    config = UrlConfig(url="https://example.com/")
+    check = UrlHealthCheck(config=config, name="Configured")
+    assert check.to_dict()["name"] == "Configured"
+
+
 def test_url_health_check_block_private_rejects_localhost() -> None:
     """With block_private_hosts=True, localhost host raises ValueError."""
     with pytest.raises(ValueError, match=r"must not be localhost"):
@@ -315,23 +329,30 @@ def test_url_health_check_properties_auth_and_transport() -> None:
 
 
 @pytest.mark.asyncio
-async def test_url_check_with_block_private_hosts_calls_validate_async() -> None:
-    """When block_private_hosts=True, __call__ runs validate_host_ssrf_async before request."""
+async def test_url_check_with_block_private_hosts_validates_every_outbound_request() -> None:
+    """The HTTPX request hook validates initial and redirected destinations."""
     check = UrlHealthCheck(
         url="https://example.com/",
         block_private_hosts=True,
         name="Test",
     )
-    response = Response(status_code=200, content=b"", request=MagicMock(), history=[])
-    async_client_mock = MagicMock(spec=AsyncClient)
-    async_client_mock.get = AsyncMock(return_value=response)
-    with (
-        patch("fast_healthchecks.checks.url.validate_host_ssrf_async", new_callable=AsyncMock) as mock_validate,
-        patch("fast_healthchecks.checks.url.AsyncClient", return_value=async_client_mock),
-    ):
-        result = await check()
-        assert result.healthy is True
-        mock_validate.assert_called_once_with("example.com")
+    redirect_request = Request("GET", "https://redirect.example/health")
+
+    with patch("fast_healthchecks.checks.url.validate_host_ssrf_async", new_callable=AsyncMock) as mock_validate:
+        await check._validate_outbound_request(redirect_request)
+
+    mock_validate.assert_awaited_once_with("redirect.example")
+
+
+def test_block_private_hosts_registers_httpx_request_hook() -> None:
+    """SSRF validation is attached to HTTPX so redirects cannot bypass it."""
+    check = UrlHealthCheck(url="https://example.com/", block_private_hosts=True)
+
+    with patch("fast_healthchecks.checks.url.AsyncClient") as client_factory:
+        check._create_client()
+
+    hooks = client_factory.call_args.kwargs["event_hooks"]
+    assert hooks == {"request": [check._validate_outbound_request]}
 
 
 @pytest.mark.asyncio

@@ -52,7 +52,7 @@ def test_parse_dsn_with_sslmode() -> None:
 
 
 def test_parse_dsn_with_ssl_params() -> None:
-    """parse_dsn with sslcert/sslkey/sslrootcert returns unquoted paths and sslctx."""
+    """parse_dsn returns unquoted SSL paths and the selected asyncpg mode."""
     result = BasePostgreSQLHealthCheck.parse_dsn(
         f"postgresql://localhost/db?sslmode=verify-full&sslcert={CERT_CRT}&sslkey={KEY_FILE}&sslrootcert={CA_CRT}",
     )
@@ -60,7 +60,15 @@ def test_parse_dsn_with_ssl_params() -> None:
     assert result["sslcert"] == CERT_CRT
     assert result["sslkey"] == KEY_FILE
     assert result["sslrootcert"] == CA_CRT
-    assert result["sslctx"] is not None
+    assert result["sslctx"] == "verify-full"
+
+
+def test_parse_dsn_rejects_key_without_client_cert() -> None:
+    """parse_dsn rejects a client key without its certificate."""
+    with pytest.raises(ValueError, match=r"sslkey requires sslcert"):
+        BasePostgreSQLHealthCheck.parse_dsn(
+            f"postgresql://localhost/db?sslmode=require&sslkey={KEY_FILE}",
+        )
 
 
 def test_parse_dsn_invalid_sslmode_raises() -> None:
@@ -95,10 +103,18 @@ def test_create_ssl_context_require_returns_context() -> None:
     assert ctx.verify_mode == ssl.CERT_NONE
 
 
-def test_create_ssl_context_verify_full_requires_sslcert() -> None:
-    """create_ssl_context with verify-full without sslcert raises ValueError."""
-    with pytest.raises(ValueError, match=r"sslcert is required for verify-full"):
-        create_ssl_context("verify-full", None, None, "/path/ca")
+def test_create_ssl_context_verify_full_does_not_require_client_cert() -> None:
+    """verify-full verifies the server without requiring optional client auth."""
+    ctx = create_ssl_context("verify-full", None, None, None)
+    assert isinstance(ctx, ssl.SSLContext)
+    assert ctx.check_hostname is True
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+
+
+def test_create_ssl_context_rejects_key_without_client_cert() -> None:
+    """A standalone client key is not a usable certificate chain."""
+    with pytest.raises(ValueError, match=r"sslkey requires sslcert"):
+        create_ssl_context("require", None, KEY_FILE, None)
 
 
 def test_create_ssl_context_verify_ca_with_cafile() -> None:

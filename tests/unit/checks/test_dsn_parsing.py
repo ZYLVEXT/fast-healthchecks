@@ -61,7 +61,7 @@ def test_typed_dict_structures() -> None:
         "sslcert": None,
         "sslkey": None,
         "sslrootcert": None,
-        "sslctx": None,
+        "sslctx": "disable",
         "direct_tls": False,
     }
     assert postgres["sslmode"] == "disable"

@@ -1,9 +1,10 @@
 [project]
 name = "fast-healthchecks"
-version = "1.0.0"
+version = "1.1.0"
 description = "Fast Healthchecks"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "Vladislav Shepilov", email = "shepilov.v@protonmail.com"},
 ]
@@ -29,12 +30,6 @@ classifiers = [
 requires-python = "<3.15.0,>=3.10.0"
 dependencies = []
 
-[tool.setuptools.package-data]
-fast_healthchecks = ["py.typed"]
-
-[tool.setuptools.packages]
-find = {}
-
 [project.urls]
 homepage = "https://github.com/ZYLVEXT/fast-healthchecks"
 documentation = "https://zylvext.github.io/fast-healthchecks/"
@@ -43,7 +38,7 @@ tracker = "https://github.com/ZYLVEXT/fast-healthchecks/issues"
 
 [project.optional-dependencies]
 asyncpg = ["asyncpg>=0.31.0,<1.0.0"]
-psycopg = ["psycopg>=3.3.3,<4.0.0"]
+psycopg = ["psycopg[binary]>=3.3.3,<4.0.0"]
 redis = ["redis>=7.3.0,<8.0.0"]
 aio-pika = ["aio-pika>=9.6.1,<10.0.0"]
 httpx = ["httpx>=0.28.1,<1.0.0"]
@@ -56,38 +51,45 @@ opensearch = ["opensearch-py[async]>=3.1.0,<4.0.0"]
 
 [dependency-groups]
 dev = [
-    "commitizen>=4.13.9",
-    "pip-audit>=2.10.0",
-    "pre-commit-uv>=4.2.1",
-    "pytest>=9.0.2",
-    "pytest-cov>=7.0.0",
-    "pytest-asyncio>=1.3.0",
+    "commitizen>=4.17.0",
+    "pip-audit>=2.10.1",
+    "prek>=0.4.12",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-asyncio>=1.4.0",
     "pytest-deadfixtures>=3.1.0",
     "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3,<7.0",
     "pytest-timeout>=2.4.0",
     "pytest-xdist>=3.8.0",
-    "pre-commit>=4.5.1",
-    "ruff>=0.15.6",
-    "rust-just>=1.46.0",
-    "ty>=0.0.23",
-    "deptry>=0.24.0",
+    "httpx2>=2.9.1,<3.0.0",
+    "ruff>=0.16.2",
+    "rust-just>=1.58.0",
+    "ty>=0.0.69",
+    "tomli>=2.4.1; python_version < '3.11'",
+    "deptry>=0.25.1",
 ]
 docs = [
-    "mkdocstrings[python]>=1.0.3",
-    "pymdown-extensions>=10.21",
-    "zensical>=0.0.27",
+    "mkdocstrings[python]>=1.0.6",
+    "pymdown-extensions>=11.0.1",
+    "zensical>=0.0.53",
 ]
 
 [tool.ty.environment]
 # Match project.requires-python minimum for type-checking.
 python-version = "3.10"
 
+[tool.ty.src]
+include = ["fast_healthchecks", "tests"]
+
 [tool.deptry]
 experimental_namespace_package = true
-pep621_dev_dependency_groups = ["dev", "docs"]
 
 [tool.deptry.per_rule_ignores]
-DEP004 = ["dotenv"]
+# dotenv is used by examples; tomli and PyYAML are used by repository-only release scripts.
+DEP004 = ["dotenv", "tomli", "yaml"]
+# tomllib is part of the standard library on Python 3.11+ and has a guarded tomli fallback on 3.10.
+DEP001 = ["tomllib"]
 
 [tool.uv]
 default-groups = []
@@ -101,6 +103,7 @@ exclude = [
     ".git",
     ".ruff_cache",
     ".tox",
+    "docs",  # Preserve Zensical/PyMdown include directives inside Python code fences.
 ]
 
 [tool.ruff.format]
@@ -117,15 +120,22 @@ line-ending = "auto"
 preview = true
 select = ["ALL"]
 ignore = [
-    "E501",  # line too long, handled by ruff-format
-    "CPY001",  # Missing copyright notice at top of file
+    "line-too-long",  # line length is handled by ruff-format
+    "missing-copyright-notice",  # copyright headers are not required
+    "missing-trailing-comma",  # conflicts with ruff-format
 ]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["ARG001", "N802", "N806", "S", "SLF"]
+"tests/**/*.py" = [
+    "unused-function-argument",
+    "invalid-function-name",
+    "non-lowercase-variable-in-function",
+    "S",
+    "SLF",
+]
 
 [tool.pytest.ini_options]
 # 60s so integration tests (network I/O, e.g. OpenSearch to invalid host) don't get killed on Windows
@@ -135,7 +145,7 @@ pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 minversion = "9.0"
-addopts = "-ra -q"
+addopts = "-ra -q --strict-markers"
 filterwarnings = [
     "error",
     "error:::fast_healthchecks",
@@ -148,9 +158,14 @@ markers = """
 
 [tool.coverage.run]
 source = ["fast_healthchecks"]
+branch = true
+parallel = true
+concurrency = ["multiprocessing", "thread"]
+sigterm = true
 
 [tool.coverage.report]
 precision = 1
+fail_under = 100
 include = ["fast_healthchecks/*"]
 omit = [
     "tests/*",
@@ -164,6 +179,11 @@ exclude_lines = [
     "except ImportError:",
     # Don't check for typing-only code
     "if TYPE_CHECKING:",
+    "^\\s*@overload\\b",
+    "@(typing\\.)?overload",
+    "^\\s*\\.\\.\\.\\s*$",
+    "^\\s*class \\w+(\\[.*\\])?\\(.*Protocol\\b.*\\):",
+    "^\\s*type \\w+\\s*=",
     # Don't check for code that only runs itself
     "if __name__ == .__main__.:",
 ]
@@ -182,5 +202,22 @@ version_files = [
 ]
 
 [build-system]
-requires = ["setuptools>=61", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling==1.31.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["fast_healthchecks"]
+artifacts = ["fast_healthchecks/py.typed"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/README.md",
+    "/docs",
+    "/fast_healthchecks",
+    "/pyproject.toml",
+    "/scripts",
+    "/tests",
+    "/zensical.toml",
+]

@@ -7,4 +7,4 @@ Naming, docstrings, and project standards are defined in the [Contributing](cont
 - [Docstrings](contributing.md#docstrings)
 - [Standards](contributing.md#standards)
 
-For CI, release, and pre-commit see the rest of [Contributing](contributing.md).
+For CI, release, and prek see the rest of [Contributing](contributing.md).

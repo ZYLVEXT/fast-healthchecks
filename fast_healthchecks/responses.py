@@ -23,7 +23,7 @@ class ProbeAsgiResponse(NamedTuple):
     healthy: bool
 
 
-async def map_report_to_asgi_http_response(  # noqa: PLR0913
+async def map_report_to_asgi_http_response(  # ruff: ignore[too-many-arguments]
     report: HealthCheckReport,
     *,
     debug: bool,
@@ -38,21 +38,23 @@ async def map_report_to_asgi_http_response(  # noqa: PLR0913
     Returns:
         Tuple of ``(body, headers, status_code)`` for framework response objects.
     """
+    healthy = report.healthy
+    status_code = success_status if healthy else failure_status
+    content_needed = status_code not in {
+        HTTPStatus.NO_CONTENT,
+        HTTPStatus.NOT_MODIFIED,
+    } and not (healthy and status_code < HTTPStatus.OK)
+
+    if not content_needed:
+        return b"", None, status_code
+
     response = ProbeAsgiResponse(
         data=asdict(
             report,
             dict_factory=lambda x: {k: v for (k, v) in x if k not in exclude_fields},
         ),
-        healthy=report.healthy,
+        healthy=healthy,
     )
-    status_code = success_status if response.healthy else failure_status
-    content_needed = status_code not in {
-        HTTPStatus.NO_CONTENT,
-        HTTPStatus.NOT_MODIFIED,
-    } and not (response.healthy and status_code < HTTPStatus.OK)
-
-    if not content_needed:
-        return b"", None, status_code
 
     if debug and not response.healthy:
         content_obj: dict[str, Any] | None = response.data
@@ -63,8 +65,7 @@ async def map_report_to_asgi_http_response(  # noqa: PLR0913
     if content_obj is None:
         return b"", None, status_code
 
-    if isinstance(content_obj, dict):
-        content_obj = redact_secrets_in_dict(content_obj)
+    content_obj = redact_secrets_in_dict(content_obj)
 
     content = json.dumps(
         content_obj,

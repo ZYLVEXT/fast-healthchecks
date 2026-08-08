@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 
+from fast_healthchecks.redaction import redact_secrets_in_dict
+
 __all__ = (
     "HealthCheckError",
     "HealthCheckReport",
@@ -67,6 +69,10 @@ class HealthError:
     timeout_ms: int | None = None
     meta: dict[str, object] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        """Store a redacted copy so secrets are safe before serialization or logging."""
+        object.__setattr__(self, "meta", redact_secrets_in_dict(self.meta))
+
 
 @dataclass(frozen=True, init=False)
 class HealthCheckResult:
@@ -85,7 +91,7 @@ class HealthCheckResult:
     def __init__(
         self,
         name: str,
-        healthy: bool,  # noqa: FBT001
+        healthy: bool,  # ruff: ignore[boolean-type-hint-positional-argument]
         error: HealthError | None = None,
         *,
         error_details: str | None = None,
@@ -140,7 +146,7 @@ class HealthCheckReport:
 
     @property
     def healthy(self) -> bool:
-        """Return whether all healthchecks passed (or allowed partial failure)."""
+        """Whether all health checks passed or partial failure was allowed."""
         if self.allow_partial_failure:
             return any(result.healthy for result in self.results)
         return all(result.healthy for result in self.results)

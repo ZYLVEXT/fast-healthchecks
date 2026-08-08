@@ -25,6 +25,9 @@ def test_redact_secrets_in_dict() -> None:
         "user": "u",
         "username": "admin",
         "sasl_plain_password": "pwd",
+        "ClientSecretValue": "client-secret",
+        "API_KEY_ID": "api-key",
+        "serviceCredential": "credential",
         "meta": {
             "token": "abc",
             "nested": {"password": "nested-secret"},
@@ -37,6 +40,9 @@ def test_redact_secrets_in_dict() -> None:
     assert result["username"] == "***"
     assert result["password"] == "***"
     assert result["sasl_plain_password"] == "***"
+    assert result["ClientSecretValue"] == "***"
+    assert result["API_KEY_ID"] == "***"
+    assert result["serviceCredential"] == "***"
     assert result["meta"]["token"] == "***"
     assert result["meta"]["nested"]["password"] == "***"
     assert result["meta"]["items"][0]["user"] == "***"
@@ -129,11 +135,13 @@ def test_validate_url_ssrf_block_private_rejects_private_ip() -> None:
 def test_validate_url_ssrf_block_private_allows_public() -> None:
     """validate_url_ssrf with block_private_hosts allows public host (e.g. example.com)."""
     validate_url_ssrf("https://example.com/", block_private_hosts=True)
+    validate_url_ssrf("https://8.8.8.8/", block_private_hosts=True)
 
 
-def test_validate_url_ssrf_block_private_empty_host_skips_check() -> None:
-    """validate_url_ssrf with empty host does not apply block_private check."""
-    validate_url_ssrf("https:///", block_private_hosts=True)
+def test_validate_url_ssrf_rejects_empty_host() -> None:
+    """validate_url_ssrf rejects URLs without a hostname."""
+    with pytest.raises(ValueError, match=r"must include a hostname"):
+        validate_url_ssrf("https:///")
 
 
 @pytest.mark.asyncio
@@ -157,10 +165,13 @@ async def test_validate_host_ssrf_async_empty_host_ok() -> None:
 
 
 @pytest.mark.asyncio
-async def test_validate_host_ssrf_async_oserror_returns_early() -> None:
-    """validate_host_ssrf_async returns without raising when getaddrinfo raises OSError."""
+async def test_validate_host_ssrf_async_oserror_fails_closed() -> None:
+    """validate_host_ssrf_async rejects hosts that cannot be resolved safely."""
     loop = asyncio.get_running_loop()
-    with patch.object(loop, "run_in_executor", AsyncMock(side_effect=OSError("resolve failed"))):
+    with (
+        patch.object(loop, "run_in_executor", AsyncMock(side_effect=OSError("resolve failed"))),
+        pytest.raises(ValueError, match=r"could not be resolved safely"),
+    ):
         await validate_host_ssrf_async("unknown.invalid.example")
 
 

@@ -1,3 +1,31 @@
+## 1.1.0 (2026-08-08)
+
+### Features
+
+- **performance**: keep root imports lazy, skip body serialization for `204`, avoid disabled-log payloads, and remove scheduler hops from sequential probes
+- **execution**: move probe execution and lifecycle ownership into the framework-neutral core and use direct sequential execution
+- **lifecycle**: retain only resource-owning checks, deduplicate shared checks, and consolidate transport cleanup into one grace period
+- **release**: add immutable tag-bound tests, reproducible artifacts, CycloneDX SBOMs, build attestations, Trusted Publishing, and guarded documentation deployment
+
+### Fixes
+
+- **security**: redact nested sensitive metadata and validate every URL redirect against the SSRF policy
+- **postgresql**: preserve native asyncpg `sslmode` behavior and allow `verify-full` without a client certificate
+- **docker**: make published service ports configurable through `.env` and keep CI connection settings aligned
+- **ci**: stop printing credential-bearing DSNs in workflow logs
+- **ci**: restore example service configuration in the cross-platform unit matrix and limit collection to unit tests
+- **packaging**: make the Psycopg extra self-contained across supported operating systems
+- **testing**: remove scheduler-sensitive timing margins from function-check tests
+- **lifecycle**: close FastAPI example routers and temporary test files when setup or execution fails
+- **docs**: align public API, lifecycle, execution, TLS, and test-matrix documentation with runtime behavior
+
+### Build
+
+- **packaging**: migrate builds to Hatchling with explicit wheel and source-distribution contents
+- **testing**: enforce 100% branch coverage across import, integration, and unit suites
+- **testing**: migrate integration event loops to the pytest-asyncio loop-factory hook
+- **toolchain**: refresh build, lint, typing, test, and documentation tools and migrate repository hooks and CI from pre-commit to prek
+
 ## 1.0.0 (2026-03-13)
 
 ### Features

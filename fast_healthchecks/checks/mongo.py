@@ -95,7 +95,7 @@ class MongoHealthCheck(
             [AsyncIOMotorClient[dict[str, Any]]],
             Awaitable[None],
         ] = _close_mongo_client,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         """Initialize the MongoHealthCheck.
 

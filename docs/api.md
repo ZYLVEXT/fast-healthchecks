@@ -1,6 +1,6 @@
 # API Reference
 
-The root package `__all__` is the single source for stable root-level exports. Prefer ``from fast_healthchecks import Probe, run_probe, healthcheck_shutdown, HealthCheckReport, HealthCheckResult, Check, FunctionConfig`` and the exception hierarchy (``HealthCheckError``, ``HealthCheckTimeoutError``, ``HealthCheckSSRFError``). Check classes (e.g. ``RedisHealthCheck``) and other configs are available from ``fast_healthchecks.checks`` or their submodules (e.g. ``fast_healthchecks.checks.redis``). See `fast_healthchecks.__all__` and `fast_healthchecks.checks.__all__`.
+The root package `__all__` is the single source for stable root-level exports and loads those exports lazily. Prefer ``from fast_healthchecks import Probe, ProbeRunner, RunPolicy, HealthCheckReport, HealthCheckResult, Check, FunctionConfig`` and the exception hierarchy (``HealthCheckError``, ``HealthCheckTimeoutError``, ``HealthCheckSSRFError``). Standalone ``run_probe`` and ``close_probes`` are available from ``fast_healthchecks.execution``; framework shutdown callbacks are exported by their corresponding integration modules. Check classes (e.g. ``RedisHealthCheck``) and other configs are loaded lazily from ``fast_healthchecks.checks`` or imported from their submodules (e.g. ``fast_healthchecks.checks.redis``). See `fast_healthchecks.__all__` and `fast_healthchecks.checks.__all__`.
 
 Config types (e.g. `RedisConfig`, `UrlConfig`) in `fast_healthchecks.checks.configs` are part of the supported API for passing `config=...` to check constructors. The `to_dict()` methods on check classes are for internal test use only and are not part of the supported public API; do not rely on them in production code.
 
@@ -73,13 +73,13 @@ except asyncio.TimeoutError as e:
 # New way (recommended) - use map_exception_to_health_error
 from fast_healthchecks.errors import map_exception_to_health_error
 
-result = await runner.run(probe)
-if not result.healthy and result.error:
-    # Structured error information
-    print(f"Error code: {result.error.code}")      # e.g., "PROBE_TIMEOUT"
-    print(f"Message: {result.error.message}")      # Human-readable message
-    print(f"Duration: {result.error.duration_ms}ms")
-    print(f"Meta: {result.error.meta}")            # Additional context
+report = await runner.run(probe)
+for result in report.results:
+    if not result.healthy and result.error:
+        print(f"Error code: {result.error.code}")
+        print(f"Message: {result.error.message}")
+        print(f"Duration: {result.error.duration_ms}ms")
+        print(f"Meta: {result.error.meta}")
 ```
 
 The `map_exception_to_health_error` function in `fast_healthchecks.errors` converts exceptions to structured `HealthError` instances with official error codes.

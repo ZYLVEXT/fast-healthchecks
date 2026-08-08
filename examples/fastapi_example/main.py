@@ -41,8 +41,10 @@ router_integration = HealthcheckRouter(
 @asynccontextmanager
 async def lifespan_integration(_app: FastAPI) -> AsyncIterator[None]:
     """Lifespan for integration app: close healthcheck router on shutdown."""
-    yield
-    await router_integration.close()
+    try:
+        yield
+    finally:
+        await router_integration.close()
 
 
 app_integration = FastAPI(lifespan=lifespan_integration)
@@ -68,8 +70,10 @@ router_success = HealthcheckRouter(
 @asynccontextmanager
 async def lifespan_success(_app: FastAPI) -> AsyncIterator[None]:
     """Lifespan for success app: close healthcheck router on shutdown."""
-    yield
-    await router_success.close()
+    try:
+        yield
+    finally:
+        await router_success.close()
 
 
 app_success = FastAPI(lifespan=lifespan_success)
@@ -95,8 +99,10 @@ router_fail = HealthcheckRouter(
 @asynccontextmanager
 async def lifespan_fail(_app: FastAPI) -> AsyncIterator[None]:
     """Lifespan for fail app: close healthcheck router on shutdown."""
-    yield
-    await router_fail.close()
+    try:
+        yield
+    finally:
+        await router_fail.close()
 
 
 app_fail = FastAPI(lifespan=lifespan_fail)
@@ -132,8 +138,10 @@ router_custom = HealthcheckRouter(
 @asynccontextmanager
 async def lifespan_custom(_app: FastAPI) -> AsyncIterator[None]:
     """Lifespan for custom app: close healthcheck router on shutdown."""
-    yield
-    await router_custom.close()
+    try:
+        yield
+    finally:
+        await router_custom.close()
 
 
 app_custom = FastAPI(lifespan=lifespan_custom)

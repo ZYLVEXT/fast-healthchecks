@@ -48,7 +48,7 @@ class FunctionHealthCheck(ConfigDictMixin, HealthCheck[HealthCheckResult]):
         func: Callable[..., Any] | None = None,
         name: str = "Function",
         executor: Executor | None = None,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         """Initialize the FunctionHealthCheck.
 

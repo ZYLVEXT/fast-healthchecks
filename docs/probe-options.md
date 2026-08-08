@@ -5,7 +5,7 @@
 | `name` | Probe identifier (e.g. `"liveness"`, `"readiness"`, `"startup"`). |
 | `checks` | List of health checks to run. |
 | `summary` | Custom description for the probe (used in responses). If omitted, a default is generated from `name`. |
-| `allow_partial_failure` | If `True`, probe is healthy when at least one check passes. Default: `False`. |
+| `default_check_timeout_ms` | Reserved legacy field; it does not alter execution. Use `RunPolicy.probe_timeout_ms` for a probe-wide timeout. |
 
 To customize HTTP responses, pass `options=build_probe_route_options(...)` to `HealthcheckRouter` or `health()`. Build options with:
 
@@ -27,9 +27,9 @@ When using [`ProbeRunner`][ProbeRunner] directly, you can customize execution be
 
 | Parameter | Description |
 |-----------|-------------|
-| `mode` | Controls how probe failures affect overall health: `"strict"` (any failure marks failed) or `"reporting"` (failures reported but don't fail check). Default: `"strict"`. |
-| `execution` | Controls probe execution: `"parallel"` (all probes run concurrently) or `"sequential"` (probes run one at a time). Default: `"parallel"`. |
-| `probe_timeout_ms` | Timeout in milliseconds for each probe. If `None`, probes use their default timeout. Default: `None`. |
+| `mode` | Controls probe-timeout handling: `"strict"` raises `HealthCheckTimeoutError`; `"reporting"` returns a failed report. Ordinary failed checks remain failed in both modes. Default: `"strict"`. |
+| `execution` | Controls check execution within one probe: `"parallel"` or `"sequential"`. Default: `"parallel"`. |
+| `probe_timeout_ms` | Timeout in milliseconds for one `runner.run(probe)` call. Default: `None`. |
 | `health_evaluation` | Controls evaluation strategy: `"all_required"` (all probes must pass) or `"partial_allowed"` (some probes can fail without failing overall). Default: `"all_required"`. |
 
 Example:
@@ -37,12 +37,7 @@ Example:
 ```python
 from fast_healthchecks import ProbeRunner, RunPolicy
 
-policy = RunPolicy(
-    mode="strict",
-    execution="parallel",
-    probe_timeout_ms=5000,
-    health_evaluation="all_required"
-)
+policy = RunPolicy(mode="strict", execution="parallel", probe_timeout_ms=5000)
 
 async with ProbeRunner(policy) as runner:
     report = await runner.run(probe)

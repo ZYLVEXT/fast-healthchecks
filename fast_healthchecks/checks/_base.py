@@ -99,6 +99,9 @@ class _HasName(Protocol):
     _name: str
 
 
+_SelfT = TypeVar("_SelfT", bound=_HasName)
+
+
 class _ConfigWithToDict(Protocol):
     def to_dict(self) -> dict[str, Any]: ...
 
@@ -107,8 +110,8 @@ def healthcheck_safe(
     *,
     invalidate_on_error: bool = False,
 ) -> Callable[
-    [Callable[Concatenate[_HasName, P], Awaitable[HealthCheckResult]]],
-    Callable[Concatenate[_HasName, P], Awaitable[HealthCheckResult]],
+    [Callable[Concatenate[_SelfT, P], Awaitable[HealthCheckResult]]],
+    Callable[Concatenate[_SelfT, P], Awaitable[HealthCheckResult]],
 ]:
     """Decorator that catches exceptions and returns a failed HealthCheckResult.
 
@@ -123,11 +126,11 @@ def healthcheck_safe(
     """
 
     def decorator(
-        method: Callable[Concatenate[_HasName, P], Awaitable[HealthCheckResult]],
-    ) -> Callable[Concatenate[_HasName, P], Awaitable[HealthCheckResult]]:
+        method: Callable[Concatenate[_SelfT, P], Awaitable[HealthCheckResult]],
+    ) -> Callable[Concatenate[_SelfT, P], Awaitable[HealthCheckResult]]:
         @functools.wraps(method)
         async def wrapper(
-            self: _HasName,
+            self: _SelfT,
             *args: P.args,
             **kwargs: P.kwargs,
         ) -> HealthCheckResult:
@@ -135,7 +138,7 @@ def healthcheck_safe(
                 return await method(self, *args, **kwargs)
             except (asyncio.CancelledError, SystemExit, KeyboardInterrupt):
                 raise
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # ruff: ignore[blind-except]
                 if invalidate_on_error:
                     invalidate = getattr(self, "_invalidate_client", None)
                     if callable(invalidate):
@@ -222,7 +225,6 @@ class ClientCachingMixin(ABC, Generic[ClientT]):
                 await self._close_client_fn(self._client)
                 self._client = None
                 self._client_loop = None
-        await asyncio.sleep(0.1)
 
     async def _ensure_client(self) -> ClientT:
         """Return cached client, creating or recreating if needed.
@@ -265,7 +267,6 @@ class ClientCachingMixin(ABC, Generic[ClientT]):
                     await self._close_client_fn(self._client)
                 self._client = None
                 self._client_loop = None
-        await asyncio.sleep(0.1)
 
 
 class HealthCheck(Protocol[T_co]):

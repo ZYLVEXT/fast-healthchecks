@@ -2,7 +2,7 @@
 
 ## Open client mechanics
 
-Checks that cache a client (Redis, Mongo, Kafka, OpenSearch, URL, RabbitMQ, PostgreSQL) keep one connection per instance. Such checks implement ``aclose()`` and are said to hold an **open client**. Open clients are **not** closed inside `run_probe`; they are closed only by the **documented shutdown path** below.
+Checks that cache a client (Redis, Mongo, Kafka, OpenSearch, and URL) keep one client per instance. Such checks implement ``aclose()`` and are said to hold an **open client**. RabbitMQ and PostgreSQL checks open and close their connection per call. Open cached clients are **not** closed inside `run_probe`; they are closed only by the **documented shutdown path** below.
 
 - **Which checks have open clients:** Any check that has an `aclose` method (e.g. those using `ClientCachingMixin`). Function-based checks and checks without `aclose` do not hold open clients.
 - **Which shutdown path closes them:** Only `healthcheck_shutdown(probes)` or `close_probes(probes)` (path **Y**). On cancellation or timeout of `run_probe`, cached clients are **not** closed; the caller is responsible for calling the shutdown path (path **X**) so that **Y** runs.
@@ -40,18 +40,20 @@ flowchart TD
 
 ## ProbeRunner (Advanced)
 
-`ProbeRunner` is a context manager that automatically manages probe lifecycle and cleanup:
+`ProbeRunner` is a context manager that automatically tracks only checks exposing `aclose()` and
+closes each unique resource-owning check once. Stateless probes are not retained:
 
 ```python
-from fast_healthchecks import ProbeRunner, RunPolicy, run_probe
-from fast_healthchecks.checks import http
+from fast_healthchecks import Probe, ProbeRunner, RunPolicy
+from fast_healthchecks.checks.url import UrlHealthCheck
 
 async def main():
+    probe = Probe(
+        name="readiness",
+        checks=[UrlHealthCheck(url="https://api.example.com/health", timeout=1.0)],
+    )
     async with ProbeRunner() as runner:
-        probes = [
-            http("https://api.example.com/health", timeout_ms=1000),
-        ]
-        results = await runner.run_all(probes)
+        report = await runner.run(probe)
         # Cached clients are automatically closed when exiting the context
 
     # Resources are already cleaned up here
@@ -60,18 +62,18 @@ async def main():
 ### Benefits
 
 - **Automatic cleanup:** Cached clients are closed automatically when exiting the `async with` block—no need to call `healthcheck_shutdown()` manually.
-- **Reusable runner:** The same `ProbeRunner` instance can be reused across multiple `run_all()` calls within the context.
+- **Reusable runner:** The same `ProbeRunner` instance can run multiple probes within the context.
 - **Timeout control:** Pass `RunPolicy` to customize execution:
 
   ```python
   async with ProbeRunner(
       policy=RunPolicy(
           probe_timeout_ms=2000,
-          execution="all",  # or "first"
-          result_on_error="unhealthy"
+          execution="sequential",
+          mode="reporting",
       )
   ) as runner:
-      results = await runner.run_all(probes)
+      report = await runner.run(probe)
   ```
 
 ### When to use
@@ -89,7 +91,7 @@ from fast_healthchecks import ProbeRunner
 async def main():
     runner = ProbeRunner()
     try:
-        results = await runner.run_all(probes)
+        report = await runner.run(probe)
     finally:
         await runner.close()
 ```
@@ -101,10 +103,10 @@ For integration with ASGI applications (FastAPI, Starlette, Litestar), you can c
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fast_healthchecks import ProbeRunner, run_probe
-from fast_healthchecks.checks import http
+from fast_healthchecks import Probe, ProbeRunner
+from fast_healthchecks.checks.url import UrlHealthCheck
 
-probes = [http("https://api.example.com/health")]
+probe = Probe(name="readiness", checks=[UrlHealthCheck(url="https://api.example.com/health")])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -118,7 +120,7 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/health")
 async def health():
     runner = app.state.runner
-    return await runner.run_all(probes)
+    return await runner.run(probe)
 ```
 
 This pattern ensures proper cleanup when the application shuts down.

@@ -19,19 +19,27 @@ bash:
 # Development
 # ------------------------------------------------------------------------------
 
-# Install pre-commit hooks. Run after uv sync --group=dev (or uv sync --all-extras --dev)
+# Sync the full development environment and install coverage at interpreter startup.
+setup:
+    uv sync --frozen --all-extras --group dev --group docs
+    @uv run python scripts/install_coverage_hook.py
+
+# Install and prepare prek hooks. Run after uv sync --group=dev (or uv sync --all-extras --dev).
 install-hooks:
     uv sync --group=dev
-    pre-commit install
-    pre-commit install --install-hooks
+    uv run prek install --prepare-hooks
 
 # Upgrade all uv dependencies
 update-uv:
     uv sync --all-extras --upgrade
 
-# Run linters (same as CI pre-commit job)
+# Run all repository hooks, matching CI.
 lint:
-    uv run --no-sync pre-commit run --show-diff-on-failure --color=always --all-files
+    uv run --no-sync prek run --show-diff-on-failure --color=always --all-files
+
+# Validate immutable GitHub Action and Docker image references.
+pin-check:
+    uv run --no-sync python scripts/validate_dependency_pins.py
 
 # ------------------------------------------------------------------------------
 # Tests
@@ -40,7 +48,7 @@ lint:
 # Run import tests
 tests-imports:
     uv sync --group=dev
-    uv run pytest -p no:xdist --cov --cov-append -m 'imports' tests/unit/test_imports.py -vvv
+    uv run pytest -p no:xdist --cov --cov-append --cov-fail-under=0 -m 'imports' tests/unit/test_imports.py -vvv
 
 # Run integration tests. Set DOCKER_SERVICES_UP=1 to skip compose up/down
 tests-integration:
@@ -57,17 +65,22 @@ tests-integration:
       docker compose up -d --wait
     fi
     uv sync --group=dev --all-extras
-    uv run pytest -p no:xdist --cov --cov-append -m 'integration' -W ignore::pytest.PytestUnraisableExceptionWarning -vvv
+    uv run pytest -p no:xdist --cov --cov-append --cov-fail-under=0 -m 'integration' -W ignore::pytest.PytestUnraisableExceptionWarning -vvv
 
 # Run unit tests
 tests-unit:
-    uv run pytest -n auto --cov --cov-append -m 'unit' -vvv
+    uv run pytest -n auto --maxprocesses=8 --cov --cov-append --cov-fail-under=0 -m 'unit' -vvv
 
 # Run all tests (imports, integration, unit) and print coverage
 tests-all:
-    rm -rf .coverage
+    uv run coverage erase
     just tests-imports && just tests-integration && just tests-unit
-    uv run coverage report
+    uv run coverage report --fail-under=100
+
+# Run the unit and import suites without Docker.
+tests-fast:
+    uv run coverage erase
+    uv run pytest -n auto --maxprocesses=8 --cov --cov-report=term-missing --cov-fail-under=0 -m 'unit'
 
 # ------------------------------------------------------------------------------
 # Docs
@@ -77,3 +90,12 @@ tests-all:
 serve-docs:
     uv sync --group=docs
     uv run zensical serve
+
+# Build documentation.
+docs-build:
+    uv sync --frozen --group=docs
+    uv run zensical build
+
+# Build source and wheel distributions.
+build:
+    uv build
