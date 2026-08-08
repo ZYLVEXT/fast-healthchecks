@@ -22,7 +22,7 @@ def _is_secret_key(key: str) -> bool:
     return normalized in _SECRET_KEYS or any(fragment in normalized for fragment in _SECRET_KEY_FRAGMENTS)
 
 
-def _redact_value(value: Any) -> Any:  # noqa: ANN401
+def _redact_value(value: Any) -> Any:  # ruff: ignore[any-type]
     if isinstance(value, dict):
         return redact_secrets_in_dict(value)
     if isinstance(value, list):

@@ -71,7 +71,7 @@ class PostgreSQLPsycopgHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
         *,
         config: PostgresPsycopgConfig | None = None,
         name: str = "PostgreSQL",
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         """Initialize the PostgreSQLPsycopgHealthCheck.
 
@@ -88,7 +88,7 @@ class PostgreSQLPsycopgHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
     @classmethod
     def _from_parsed_dsn(
         cls,
-        parsed: "PostgresParseDsnResult",  # noqa: UP037
+        parsed: "PostgresParseDsnResult",  # ruff: ignore[quoted-annotation]
         *,
         name: str = "PostgreSQL",
         timeout: float = DEFAULT_HC_TIMEOUT,

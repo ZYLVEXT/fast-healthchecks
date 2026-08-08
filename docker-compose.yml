@@ -2,7 +2,7 @@ services:
 
   postgres:
     container_name: dev_fast_healthchecks_postgres
-    image: ${POSTGRES_IMAGE:-postgres:17.10-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193}
+    image: ${POSTGRES_IMAGE:-postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}
     platform: ${DOCKER_PLATFORM:-linux/amd64}
     ports: ['${POSTGRES_PORT:-5432}:5432']
     environment:

@@ -19,7 +19,7 @@ Each piece of documentation has one canonical source. When editing, change only 
 | Changelog | CHANGELOG.md. docs/changelog.md includes it. |
 | Package version | pyproject.toml `version`. commitizen syncs to `fast_healthchecks/__init__.py` `__version__`. |
 | Installation (pip/poetry/uv, extras) | docs/installation.md. README has a short line and link to the documentation. |
-| Example code in docs | Files in `examples/`. Included in docs/usage.md via `include-markdown`. Code in `examples/` is part of the codebase and must follow PEP 8 and the project style (Ruff, pre-commit). |
+| Example code in docs | Files in `examples/`. Included in docs/usage.md via PyMdown Snippets. Code in `examples/` is part of the codebase and must follow PEP 8 and the project style (Ruff, prek). |
 | User-facing docs (configuration, lifecycle, probe options, DSN, run_probe, SSRF, PostgreSQL TLS rotation) | docs/ (docs/index.md and related Zensical pages). In case of conflict, docs are authoritative. README is the entry point with a short overview and links to the documentation. |
 | Public API boundary (configs, to_dict) | **docs/api.md** is the single source of truth for the public API. README may have a one-line pointer to API Reference. |
 | Style guide (naming, docstrings, standards) | This file. docs/style-guide.md is a pointer to the relevant sections. |
@@ -43,7 +43,7 @@ Use lowercase; multi-word filenames use a hyphen (e.g. `probe-options.md`, `dsn-
 
 - **Packages and modules:** Use `snake_case` (e.g. `fast_healthchecks`, `dsn_parsing`). See PEP 8.
 - **Private modules:** Use a leading underscore for internal implementation modules (e.g. `_base`, `_imports`). These are not part of the stable public import surface. Config types are available from `fast_healthchecks.checks.configs`.
-- **Tests:** Test files are named `test_*.py`. The pre-commit hook `name-tests-test` enforces this. Exceptions (utility or helper modules that are not tests) are listed in `.pre-commit-config.yaml` under that hook: `tests/utils.py` (shared test utilities), `tests/unit/integrations/helpers.py` (unit-test helpers), `tests/integration/checks/httpbin_like_app.py` (helper ASGI app for integration tests, not a test case).
+- **Tests:** Test files are named `test_*.py`. The prek hook `name-tests-test` enforces this. Exceptions (utility or helper modules that are not tests) are listed in `prek.toml` under that hook: `tests/utils.py` (shared test utilities), `tests/unit/integrations/helpers.py` (unit-test helpers), `tests/integration/checks/httpbin_like_app.py` (helper ASGI app for integration tests, not a test case).
 - **Integrations:** FastStream and Litestar integrations intentionally duplicate the structure (health, _add_probe_route); shared logic lives in `integrations.base`.
 
 ### Workflows
@@ -52,7 +52,7 @@ Files in `.github/workflows/` use a numeric prefix for order. In the GitHub Acti
 
 | File | Display name | Purpose |
 |------|--------------|---------|
-| `1_test.yml` | Tests | Pre-commit, import tests, unit tests, integration tests. |
+| `1_test.yml` | Tests | Prek, import tests, unit tests, integration tests. |
 | `2_bump.yml` | Bump version | Manual version bump and tag (commitizen). Optional input: `increment` (PATCH/MINOR/MAJOR). Release notes come from CHANGELOG.md; see below. |
 | `2_rollback.yml` | Rollback release | Delete GitHub release and tag, force-push branch to commit before tag. |
 | `3_release.yml` | Release | Build and publish to PyPI (Trusted Publishing). |
@@ -81,7 +81,7 @@ The project follows:
 - **PEP 8** — code style (enforced by Ruff).
 - **PEP 257** — docstrings; **Google** convention for format (set in Ruff).
 - **Semantic Versioning** — versioning (commitizen, semver in `pyproject.toml`).
-- **Conventional Commits** — commit message format (commitizen check in pre-commit).
+- **Conventional Commits** — commit message format (commitizen check in prek).
 - **ADR** — architecture decisions in `docs/decisions/` with numbering and status. When adding a new ADR: create `docs/decisions/NNN-short-title.md` (e.g. `002-some-topic.md`), include sections Status, Context, and Decision; update the table in [docs/decisions/README.md](docs/decisions/README.md) with the new row (number, title, status, short summary).
 
 ## Backward compatibility and deprecation
@@ -93,7 +93,7 @@ The project follows:
 
 ## CI and release
 
-Full description of release and CI (workflows, secrets, bump, rollback, pre-commit) is only in this section. README has a short pointer and link here.
+Full description of release and CI (workflows, secrets, bump, rollback, prek) is only in this section. README has a short pointer and link here.
 
 **Security:** Vulnerability reports are handled privately; see [SECURITY.md](SECURITY.md). Do not open public issues for security-sensitive bugs.
 
@@ -115,16 +115,16 @@ In both cases the GitHub Release body is the first version block from CHANGELOG.
 
 ### Test certificates
 
-Files under `tests/certs/` (e.g. `key.key`, `ca.key`) are used only to run tests (unit and integration, e.g. TLS checks). They are excluded from the pre-commit hook `detect-private-key` by design. Do not use them outside local or CI test runs. In production, use your own certificates and secrets.
+Files under `tests/certs/` (e.g. `key.key`, `ca.key`) are used only to run tests (unit and integration, e.g. TLS checks). They are excluded from the prek hook `detect-private-key` by design. Do not use them outside local or CI test runs. In production, use your own certificates and secrets.
 
 ### Reproducible build
 
 On release (tag), the workflow runs a **reproducible-build** job: two builds in the same runner with the same Python version (3.14), same lockfile (`uv sync --frozen`), and `SOURCE_DATE_EPOCH=0`. Wheel hashes are compared; the job fails if they differ. **Scope:** reproducibility is defined within this fixed environment (same runner image, same Python patch version, same toolchain). We do not claim cross-version or cross-runner reproducibility.
 
-### Pre-commit
+### Prek
 
-Pre-commit runs the same checks as CI. The hook `no-commit-to-branch` is skipped on CI via `SKIP`. Pre-commit is executed with `uv run --no-sync pre-commit run ...`; `pre-commit-uv` is in the dev dependency group and locked in `uv.lock`.
+Prek runs the same checks as CI. The hook `no-commit-to-branch` is skipped on CI via `SKIP`. Prek is executed with `uv run --no-sync prek run ...` and is locked in the dev dependency group.
 
-When updating uv, update the uv-pre-commit revision in `.pre-commit-config.yaml` to match: use the [uv-pre-commit releases](https://github.com/astral-sh/uv-pre-commit/releases) and set `rev` to the commit SHA that corresponds to the uv version (keep the `# frozen: <version>` comment for readability).
+When updating uv, update the uv-pre-commit revision in `prek.toml` to match: use the [uv-pre-commit releases](https://github.com/astral-sh/uv-pre-commit/releases) and set `rev` to the commit SHA that corresponds to the uv version (keep the `# frozen: <version>` comment for readability).
 
-Periodically update hook revisions in `.pre-commit-config.yaml` (e.g. run `pre-commit autoupdate`), then run pre-commit and the test suite to verify.
+Periodically update hook revisions in `prek.toml` with `prek update --freeze`, then run `prek validate-config prek.toml`, `prek run --all-files`, and the test suite to verify.

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import shutil
-import subprocess  # noqa: S404 - fixed argv execution is required for the audit tools
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - fixed argv execution is required for the audit tools
 import tempfile
 from pathlib import Path
 
@@ -20,7 +20,7 @@ def main() -> None:
         raise RuntimeError(msg)
     with tempfile.TemporaryDirectory(prefix="fast-healthchecks-audit-") as temp_dir:
         requirements = Path(temp_dir) / "requirements.txt"
-        subprocess.run(  # noqa: S603 - argv and executable are controlled above
+        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - argv and executable are controlled above
             [
                 uv_executable,
                 "export",
@@ -36,7 +36,7 @@ def main() -> None:
             ],
             check=True,
         )
-        subprocess.run(  # noqa: S603 - argv and executable are controlled above
+        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - argv and executable are controlled above
             [uv_executable, "run", "pip-audit", "-r", str(requirements)],
             check=True,
         )

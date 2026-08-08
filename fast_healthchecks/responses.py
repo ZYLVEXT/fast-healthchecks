@@ -23,7 +23,7 @@ class ProbeAsgiResponse(NamedTuple):
     healthy: bool
 
 
-async def map_report_to_asgi_http_response(  # noqa: PLR0913
+async def map_report_to_asgi_http_response(  # ruff: ignore[too-many-arguments]
     report: HealthCheckReport,
     *,
     debug: bool,

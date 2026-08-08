@@ -138,7 +138,7 @@ def healthcheck_safe(
                 return await method(self, *args, **kwargs)
             except (asyncio.CancelledError, SystemExit, KeyboardInterrupt):
                 raise
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # ruff: ignore[blind-except]
                 if invalidate_on_error:
                     invalidate = getattr(self, "_invalidate_client", None)
                     if callable(invalidate):

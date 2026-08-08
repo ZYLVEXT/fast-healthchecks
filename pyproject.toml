@@ -51,28 +51,28 @@ opensearch = ["opensearch-py[async]>=3.1.0,<4.0.0"]
 
 [dependency-groups]
 dev = [
-    "commitizen>=4.13.9",
-    "pip-audit>=2.10.0",
-    "pre-commit-uv>=4.2.1",
-    "pytest>=9.0.2",
-    "pytest-cov>=7.0.0",
-    "pytest-asyncio>=1.3.0",
+    "commitizen>=4.17.0",
+    "pip-audit>=2.10.1",
+    "prek>=0.4.12",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-asyncio>=1.4.0",
     "pytest-deadfixtures>=3.1.0",
     "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3,<7.0",
     "pytest-timeout>=2.4.0",
     "pytest-xdist>=3.8.0",
     "httpx2>=2.9.1,<3.0.0",
-    "pre-commit>=4.5.1",
-    "ruff>=0.15.6",
-    "rust-just>=1.46.0",
-    "ty>=0.0.23",
+    "ruff>=0.16.2",
+    "rust-just>=1.58.0",
+    "ty>=0.0.69",
     "tomli>=2.4.1; python_version < '3.11'",
-    "deptry>=0.24.0",
+    "deptry>=0.25.1",
 ]
 docs = [
-    "mkdocstrings[python]>=1.0.3",
-    "pymdown-extensions>=10.21",
-    "zensical>=0.0.27",
+    "mkdocstrings[python]>=1.0.6",
+    "pymdown-extensions>=11.0.1",
+    "zensical>=0.0.53",
 ]
 
 [tool.ty.environment]
@@ -86,8 +86,8 @@ include = ["fast_healthchecks", "tests"]
 experimental_namespace_package = true
 
 [tool.deptry.per_rule_ignores]
-# dotenv is used by executable examples; tomli is used only by the Python 3.10 release script.
-DEP004 = ["dotenv", "tomli"]
+# dotenv is used by examples; tomli and PyYAML are used by repository-only release scripts.
+DEP004 = ["dotenv", "tomli", "yaml"]
 
 [tool.uv]
 default-groups = []
@@ -101,6 +101,7 @@ exclude = [
     ".git",
     ".ruff_cache",
     ".tox",
+    "docs",  # Preserve Zensical/PyMdown include directives inside Python code fences.
 ]
 
 [tool.ruff.format]
@@ -117,16 +118,22 @@ line-ending = "auto"
 preview = true
 select = ["ALL"]
 ignore = [
-    "E501",  # line too long, handled by ruff-format
-    "CPY001",  # Missing copyright notice at top of file
-    "COM812",  # conflicts with ruff-format
+    "line-too-long",  # line length is handled by ruff-format
+    "missing-copyright-notice",  # copyright headers are not required
+    "missing-trailing-comma",  # conflicts with ruff-format
 ]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["ARG001", "N802", "N806", "S", "SLF"]
+"tests/**/*.py" = [
+    "unused-function-argument",
+    "invalid-function-name",
+    "non-lowercase-variable-in-function",
+    "S",
+    "SLF",
+]
 
 [tool.pytest.ini_options]
 # 60s so integration tests (network I/O, e.g. OpenSearch to invalid host) don't get killed on Windows
@@ -193,7 +200,7 @@ version_files = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.31.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

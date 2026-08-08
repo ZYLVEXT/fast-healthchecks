@@ -83,19 +83,20 @@ def _remove_empty_parents(p: Path, boundary: Path) -> None:
 def create_temp_files(temp_file_paths: list[str]) -> Generator[None, None, None]:
     """Create temp files from paths; yield; then unlink and clean empty parents."""
     paths = [Path(temp_file_path) for temp_file_path in temp_file_paths]
-    for path in paths:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.name in SSL_FILES_MAP:
-            shutil.copyfile(SSL_FILES_MAP[path.name], path)
-        else:
-            with path.open("w") as f:
-                f.write("Temporary content.")
-                f.flush()
+    try:
+        for path in paths:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.name in SSL_FILES_MAP:
+                shutil.copyfile(SSL_FILES_MAP[path.name], path)
+            else:
+                with path.open("w") as f:
+                    f.write("Temporary content.")
+                    f.flush()
 
-    yield
+        yield
+    finally:
+        for path in paths:
+            path.unlink(missing_ok=True)
 
-    for path in paths:
-        path.unlink(missing_ok=True)
-
-    for path in paths:
-        _remove_empty_parents(path, temp_dir)
+        for path in paths:
+            _remove_empty_parents(path, temp_dir)

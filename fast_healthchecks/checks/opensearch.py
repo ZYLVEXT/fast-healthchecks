@@ -81,7 +81,7 @@ class OpenSearchHealthCheck(
         config: OpenSearchConfig | None = None,
         name: str = "OpenSearch",
         close_client_fn: Callable[[AsyncOpenSearch], Awaitable[None]] = _close_opensearch_client,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         """Initialize the OpenSearchHealthCheck.
 

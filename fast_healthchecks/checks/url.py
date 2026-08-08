@@ -70,7 +70,7 @@ class UrlHealthCheck(ClientCachingMixin["AsyncClient"], ConfigDictMixin, HealthC
         config: UrlConfig | None = None,
         name: str = "HTTP",
         close_client_fn: Callable[[AsyncClient], Awaitable[None]] = _close_url_client,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         """Initialize the health check.
 

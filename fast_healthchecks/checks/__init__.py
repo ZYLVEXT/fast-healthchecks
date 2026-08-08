@@ -1,6 +1,6 @@
 """Health-check protocols and configuration contracts with lazy exports."""
 
-# ruff: noqa: RUF067
+# ruff: file-ignore[non-empty-init-module]
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ __all__ = (
 )
 
 
-def __getattr__(name: str) -> Any:  # noqa: ANN401
+def __getattr__(name: str) -> Any:  # ruff: ignore[any-type]
     """Load a configuration or protocol only when first accessed.
 
     Returns:

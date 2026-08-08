@@ -91,7 +91,7 @@ class HealthCheckResult:
     def __init__(
         self,
         name: str,
-        healthy: bool,  # noqa: FBT001
+        healthy: bool,  # ruff: ignore[boolean-type-hint-positional-argument]
         error: HealthError | None = None,
         *,
         error_details: str | None = None,
@@ -146,7 +146,7 @@ class HealthCheckReport:
 
     @property
     def healthy(self) -> bool:
-        """Return whether all healthchecks passed (or allowed partial failure)."""
+        """Whether all health checks passed or partial failure was allowed."""
         if self.allow_partial_failure:
             return any(result.healthy for result in self.results)
         return all(result.healthy for result in self.results)

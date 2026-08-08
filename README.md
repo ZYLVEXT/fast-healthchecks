@@ -139,7 +139,7 @@ just lint
 
 Certificates in `tests/certs/` are for tests only; see CONTRIBUTING § Test certificates.
 
-CI runs pre-commit and the complete import, integration, and unit test suite on pushes to `main`, pull requests, version tags, and manual workflow dispatches.
+CI runs prek and the complete import, integration, and unit test suite on pushes to `main`, pull requests, version tags, and manual workflow dispatches.
 
 ### Serve documentation
 
@@ -149,7 +149,7 @@ just serve-docs
 
 ### Release and CI (maintainers)
 
-Bump, rollback, workflows, secrets, pre-commit, and dependency updates: see [CONTRIBUTING § CI and release](CONTRIBUTING.md#ci-and-release) and the [workflows table](CONTRIBUTING.md#workflows) there. Quick links: [Bump version](https://github.com/ZYLVEXT/fast-healthchecks/actions/workflows/2_bump.yml), [Rollback release](https://github.com/ZYLVEXT/fast-healthchecks/actions/workflows/2_rollback.yml).
+Bump, rollback, workflows, secrets, prek, and dependency updates: see [CONTRIBUTING § CI and release](CONTRIBUTING.md#ci-and-release) and the [workflows table](CONTRIBUTING.md#workflows) there. Quick links: [Bump version](https://github.com/ZYLVEXT/fast-healthchecks/actions/workflows/2_bump.yml), [Rollback release](https://github.com/ZYLVEXT/fast-healthchecks/actions/workflows/2_rollback.yml).
 
 ## Known alternatives
 

@@ -26,7 +26,7 @@ __all__ = (
 class ProbeLoggerProtocol(Protocol):
     """Protocol for probe/check logging. Implementations must not emit secrets."""
 
-    def log(self, level: int, msg: str, **extra: Any) -> None:  # noqa: ANN401
+    def log(self, level: int, msg: str, **extra: Any) -> None:  # ruff: ignore[any-type]
         """Log a message with optional structured extra fields.
 
         Extra dict is expected to be redacted by the implementation
@@ -38,7 +38,7 @@ class ProbeLoggerProtocol(Protocol):
 class NullLogger:
     """Logger that emits no records. Used when logging is disabled."""
 
-    def log(self, level: int, msg: str, **extra: Any) -> None:  # noqa: ANN401
+    def log(self, level: int, msg: str, **extra: Any) -> None:  # ruff: ignore[any-type]
         """No-op."""
 
 
@@ -57,7 +57,7 @@ def is_probe_logging_enabled() -> bool:
 
 def set_probe_logger(logger: ProbeLoggerProtocol) -> None:
     """Set the probe logger. Use NullLogger() to disable logging."""
-    global _probe_logger  # noqa: PLW0603
+    global _probe_logger  # ruff: ignore[global-statement]
     _probe_logger = logger
 
 
@@ -67,7 +67,7 @@ class _StdlibProbeLogger:
     def __init__(self, name: str = "fast_healthchecks.probe") -> None:
         self._logger = logging.getLogger(name)
 
-    def log(self, level: int, msg: str, **extra: Any) -> None:  # noqa: ANN401
+    def log(self, level: int, msg: str, **extra: Any) -> None:  # ruff: ignore[any-type]
         """Log with redacted extra (no secrets in output)."""
         redacted = redact_secrets_in_dict(dict(extra))
         self._logger.log(level, msg, extra=redacted)

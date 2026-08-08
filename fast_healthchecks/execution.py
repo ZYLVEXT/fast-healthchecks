@@ -44,7 +44,7 @@ class Probe(NamedTuple):
 
     @property
     def endpoint_summary(self) -> str:
-        """Return the explicit summary or derive a readable route summary."""
+        """The explicit summary or a readable summary derived from the route."""
         if self.summary:
             return self.summary
         title = re.sub(
@@ -86,10 +86,10 @@ async def _run_check_safe(check: Check, index: int) -> HealthCheckResult:
                 index=index,
                 healthy=result.healthy,
             )
-        return result  # noqa: TRY300
+        return result  # ruff: ignore[try-consider-else]
     except (asyncio.CancelledError, SystemExit, KeyboardInterrupt):
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # ruff: ignore[blind-except]
         result = result_on_error(name, exc)
         if logger is not None:
             logger.log(logging.DEBUG, "check_end", check_name=name, index=index, healthy=False)
@@ -137,7 +137,7 @@ async def _run_sequential(
     return results
 
 
-async def run_probe(  # noqa: PLR0913
+async def run_probe(  # ruff: ignore[too-many-arguments]
     probe: Probe,
     *,
     timeout: float | None = None,
@@ -248,7 +248,7 @@ class ProbeRunner:
     _resource_checks: list[object] = field(default_factory=list, init=False, repr=False, compare=False)
     _resource_check_ids: set[int] = field(default_factory=set, init=False, repr=False, compare=False)
 
-    async def __aenter__(self) -> ProbeRunner:  # noqa: PYI034
+    async def __aenter__(self) -> ProbeRunner:  # ruff: ignore[non-self-return-type]
         """Return self for async context-manager usage."""
         return self
 

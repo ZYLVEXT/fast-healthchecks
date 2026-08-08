@@ -6,7 +6,9 @@ import asyncio
 import base64
 
 from litestar import Litestar, Request, Response, get
-from litestar.params import FromPath  # noqa: TC002 - Litestar inspects this annotation at runtime
+from litestar.params import (
+    FromPath,  # ruff: ignore[typing-only-third-party-import] - Litestar inspects this annotation at runtime
+)
 
 
 @get("/status/{code:int}", sync_to_thread=False)

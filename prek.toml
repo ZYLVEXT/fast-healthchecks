@@ -1,0 +1,165 @@
+# Configuration file for `prek`, a git hook framework written in Rust.
+# See https://prek.j178.dev for more information.
+#:schema https://www.schemastore.org/prek.json
+#
+# Run the same checks locally; CI uses prek after `uv sync` (see .github/workflows/1_test.yml):
+#   uv sync --frozen --all-extras --group dev --group docs
+#   prek run --show-diff-on-failure --color=always --all-files
+
+exclude = "^(uv.lock|.vscode/)"
+default_install_hook_types = [
+  "pre-commit",
+  "commit-msg"
+  ]
+default_language_version = { python = "python3.10" }
+
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "ruff-lint",
+    name = "ruff lint",
+    entry = "uv run ruff check --force-exclude",
+    args = [
+      "--fix",
+      "--exit-non-zero-on-fix",
+      "--preview"
+    ],
+    types_or = [
+      "python",
+      "pyi"
+    ],
+    language = "system"
+  },
+  {
+    id = "ruff-format",
+    name = "ruff format",
+    entry = "uv run ruff format --force-exclude",
+    args = ["--preview"],
+    types_or = [
+      "python",
+      "pyi"
+    ],
+    language = "system"
+  },
+  {
+    id = "ty-check",
+    name = "ty-check",
+    entry = "uv run ty check",
+    types_or = [
+      "python",
+      "pyi"
+    ],
+    language = "system",
+    pass_filenames = false
+  },
+  {
+    id = "deptry",
+    name = "deptry",
+    entry = "uv run deptry .",
+    language = "system",
+    pass_filenames = false
+  },
+  {
+    id = "dependency-pins",
+    name = "Dependency pins",
+    entry = "uv run --no-sync python scripts/validate_dependency_pins.py",
+    files = '^(\.github/.*\.ya?ml|(?:.*/)?docker-compose[^/]*\.ya?ml|docker/(?:.*/)?compose[^/]*\.ya?ml|scripts/validate_dependency_pins\.py)$',
+    language = "system",
+    pass_filenames = false
+  },
+  {
+    id = "pip-audit",
+    name = "pip-audit",
+    entry = "uv run python scripts/audit_dependencies.py",
+    language = "system",
+    pass_filenames = false
+  },
+  {
+    id = "commitizen",
+    name = "commitizen check",
+    entry = "uv run cz check --allow-abort --commit-msg-file",
+    language = "system",
+    stages = ["commit-msg"]
+  }
+]
+
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "3e8a8703264a2f4a69428a0aa4dcb512790b2c8c" # frozen: v6.0.0
+hooks = [
+  { id = "check-added-large-files" },
+  { id = "check-ast" },
+  { id = "check-builtin-literals" },
+  { id = "check-case-conflict" },
+  { id = "check-illegal-windows-names" },
+  { id = "check-docstring-first" },
+  { id = "check-executables-have-shebangs" },
+  { id = "check-json" },
+  {
+    id = "check-merge-conflict",
+    args = ["--assume-in-merge"]
+  },
+  { id = "check-shebang-scripts-are-executable" },
+  { id = "check-symlinks" },
+  { id = "check-toml" },
+  { id = "check-vcs-permalinks" },
+  { id = "check-xml" },
+  {
+    id = "check-yaml",
+    args = [
+      "--allow-multiple-documents",
+      "--unsafe"
+    ]
+  },
+  { id = "debug-statements" },
+  { id = "destroyed-symlinks" },
+  { id = "detect-aws-credentials" },
+  {
+    id = "detect-private-key",
+    exclude = """
+(?x)^(
+  tests/certs/key.key|
+  tests/certs/ca.key
+)$"""
+  },
+  { id = "end-of-file-fixer" },
+  { id = "file-contents-sorter" },
+  { id = "fix-byte-order-marker" },
+  { id = "forbid-new-submodules" },
+  { id = "mixed-line-ending" },
+  {
+    id = "name-tests-test",
+    args = ["--pytest-test-first"],
+    exclude = """
+(?x)^(
+  tests/utils.py|
+  tests/unit/integrations/helpers.py|
+  tests/integration/checks/httpbin_like_app.py
+)$"""
+  },
+  {
+    id = "no-commit-to-branch",
+    args = [
+      "--branch",
+      "main"
+    ]
+  },
+  {
+    id = "pretty-format-json",
+    args = [
+      "--autofix",
+      "--indent=4",
+      "--no-sort-keys"
+    ]
+  },
+  { id = "sort-simple-yaml" },
+  { id = "trailing-whitespace" }
+]
+
+[[repos]]
+repo = "https://github.com/astral-sh/uv-pre-commit"
+rev = "8d582f54b8e4cc5a61a85eeed1f54bbdb1e294fc" # frozen: 0.12.3
+hooks = [
+  { id = "uv-lock" }
+]

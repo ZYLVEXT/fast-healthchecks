@@ -6,10 +6,14 @@ import asyncio
 import os
 import sys
 import warnings
-from typing import Any
+from typing import TYPE_CHECKING
 
 import pytest
 from dotenv import dotenv_values
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -45,37 +49,21 @@ if sys.platform == "win32" and sys.version_info < (3, 16):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
-def _asyncio_policy_for_tests() -> asyncio.AbstractEventLoopPolicy | None:
-    """Return event loop policy for pytest-asyncio; use deprecated APIs only where needed.
-
-    Windows needs SelectorEventLoop for psycopg etc.; policy APIs are deprecated in 3.14
-    (removed in 3.16). We suppress only at use site—pytest-asyncio controls loop creation.
-    """
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message=".*(?:DefaultEventLoopPolicy|WindowsSelectorEventLoopPolicy).*deprecated",
-            category=DeprecationWarning,
-        )
-        if sys.platform == "win32" and sys.version_info < (3, 16):
-            return asyncio.WindowsSelectorEventLoopPolicy()
-        if sys.version_info >= (3, 14):
-            return None
-        return asyncio.DefaultEventLoopPolicy()
-
-
-@pytest.fixture(scope="session")
-def event_loop_policy() -> asyncio.AbstractEventLoopPolicy | None:
-    """Use SelectorEventLoop on Windows so psycopg (and other libs) work in async mode.
+@pytest.hookimpl
+def pytest_asyncio_loop_factories(
+    config: pytest.Config,
+    item: pytest.Item,
+) -> dict[str, Callable[[], asyncio.AbstractEventLoop]]:
+    """Use selector loops for async integration tests.
 
     Windows defaults to ProactorEventLoop, which psycopg cannot use for async I/O.
-    Use WindowsSelectorEventLoopPolicy on Windows for Python < 3.16 (deprecated in 3.14,
-    removed in 3.16). On non-Windows 3.14+, return None so pytest-asyncio uses default.
+    Supplying a factory through the pytest-asyncio hook avoids the deprecated
+    ``event_loop_policy`` fixture and keeps the same loop behavior on every platform.
 
     Returns:
-        Event loop policy, or None on Python 3.14+ (non-Windows) to avoid deprecated APIs.
+        The named event-loop factories used to parametrize async tests.
     """
-    return _asyncio_policy_for_tests()
+    return {"selector": asyncio.SelectorEventLoop}
 
 
 def _service_config_from_env(

@@ -24,19 +24,22 @@ setup:
     uv sync --frozen --all-extras --group dev --group docs
     @uv run python scripts/install_coverage_hook.py
 
-# Install pre-commit hooks. Run after uv sync --group=dev (or uv sync --all-extras --dev)
+# Install and prepare prek hooks. Run after uv sync --group=dev (or uv sync --all-extras --dev).
 install-hooks:
     uv sync --group=dev
-    pre-commit install
-    pre-commit install --install-hooks
+    uv run prek install --prepare-hooks
 
 # Upgrade all uv dependencies
 update-uv:
     uv sync --all-extras --upgrade
 
-# Run linters (same as CI pre-commit job)
+# Run all repository hooks, matching CI.
 lint:
-    uv run --no-sync pre-commit run --show-diff-on-failure --color=always --all-files
+    uv run --no-sync prek run --show-diff-on-failure --color=always --all-files
+
+# Validate immutable GitHub Action and Docker image references.
+pin-check:
+    uv run --no-sync python scripts/validate_dependency_pins.py
 
 # ------------------------------------------------------------------------------
 # Tests

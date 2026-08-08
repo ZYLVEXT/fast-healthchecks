@@ -14,7 +14,7 @@ from fast_healthchecks.execution import (
     Probe,
     ProbeRunner,
     close_probes,
-    run_probe,  # noqa: F401
+    run_probe,  # ruff: ignore[unused-import]
 )
 from fast_healthchecks.responses import ProbeAsgiResponse, map_report_to_asgi_http_response
 
@@ -67,7 +67,7 @@ class ProbeRouteOptions(NamedTuple):
         )
 
 
-async def default_handler(response: ProbeAsgiResponse) -> dict[str, Any] | None:  # noqa: RUF029
+async def default_handler(response: ProbeAsgiResponse) -> dict[str, Any] | None:  # ruff: ignore[unused-async]
     """Default handler for health check route.
 
     Returns a minimal body ``{"status": "healthy"|"unhealthy"}`` for responses
@@ -82,7 +82,7 @@ async def default_handler(response: ProbeAsgiResponse) -> dict[str, Any] | None:
     return {"status": "healthy" if response.healthy else "unhealthy"}
 
 
-def build_probe_route_options(  # noqa: PLR0913
+def build_probe_route_options(  # ruff: ignore[too-many-arguments]
     *,
     success_handler: HandlerType = default_handler,
     failure_handler: HandlerType = default_handler,
@@ -200,7 +200,7 @@ def _build_default_runner(timeout: float | None) -> ProbeRunner:
     Returns:
         ProbeRunner configured with reporting mode and mapped probe timeout.
     """
-    from fast_healthchecks.execution import RunPolicy  # noqa: PLC0415
+    from fast_healthchecks.execution import RunPolicy  # ruff: ignore[import-outside-top-level]
 
     timeout_ms = None if timeout is None else max(int(timeout * 1000), 1)
     return ProbeRunner(policy=RunPolicy(mode="reporting", probe_timeout_ms=timeout_ms))
