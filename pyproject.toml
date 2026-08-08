@@ -88,6 +88,8 @@ experimental_namespace_package = true
 [tool.deptry.per_rule_ignores]
 # dotenv is used by examples; tomli and PyYAML are used by repository-only release scripts.
 DEP004 = ["dotenv", "tomli", "yaml"]
+# tomllib is part of the standard library on Python 3.11+ and has a guarded tomli fallback on 3.10.
+DEP001 = ["tomllib"]
 
 [tool.uv]
 default-groups = []

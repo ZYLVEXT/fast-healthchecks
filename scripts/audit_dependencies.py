@@ -27,7 +27,6 @@ def main() -> None:
                 "--quiet",
                 "--all-extras",
                 "--all-groups",
-                "--no-hashes",
                 "--no-emit-project",
                 "--no-emit-package",
                 "pip",
@@ -37,7 +36,15 @@ def main() -> None:
             check=True,
         )
         subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - argv and executable are controlled above
-            [uv_executable, "run", "pip-audit", "-r", str(requirements)],
+            [
+                uv_executable,
+                "run",
+                "pip-audit",
+                "--disable-pip",
+                "--require-hashes",
+                "-r",
+                str(requirements),
+            ],
             check=True,
         )
 
