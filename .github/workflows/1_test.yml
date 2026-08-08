@@ -81,8 +81,11 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install test environment
         run: uv sync --frozen --all-extras --group dev
+      - name: Configure example services
+        shell: bash
+        run: cp .env.example .env
       - name: Run unit suite
-        run: uv run --no-sync pytest -n auto --maxprocesses=8 -m unit
+        run: uv run --no-sync pytest -n auto --maxprocesses=8 -m unit tests/unit
 
   imports:
     name: Base-install import isolation
