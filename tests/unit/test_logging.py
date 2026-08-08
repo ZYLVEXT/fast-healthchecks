@@ -19,6 +19,18 @@ pytestmark = pytest.mark.unit
 _MIN_PROBE_LOG_RECORDS = 2
 
 
+class _CollectingHandler(logging.Handler):
+    """Collect emitted records without replacing a typed method at runtime."""
+
+    def __init__(self, records: list[logging.LogRecord]) -> None:
+        super().__init__()
+        self._records = records
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Append one emitted record."""
+        self._records.append(record)
+
+
 def test_default_logger_is_null_logger() -> None:
     """Default probe logger is NullLogger (logging disabled)."""
     assert type(get_probe_logger()) is NullLogger
@@ -46,8 +58,7 @@ async def test_when_logging_disabled_handler_receives_zero_records() -> None:
     # Attach handler to stdlib logger that would be used if we enabled it
     stdlib_logger = logging.getLogger("fast_healthchecks.probe")
     records: list[logging.LogRecord] = []
-    handler = logging.Handler()
-    handler.emit = lambda r: records.append(r)  # type: ignore[method-assign]  # noqa: PLW0108
+    handler = _CollectingHandler(records)
     stdlib_logger.addHandler(handler)
     stdlib_logger.setLevel(logging.DEBUG)
     try:
@@ -69,8 +80,7 @@ async def test_when_logging_enabled_probe_start_and_end_logged() -> None:
     records: list[logging.LogRecord] = []
     logger = logging.getLogger("fast_healthchecks.probe.test_enabled")
     logger.setLevel(logging.DEBUG)
-    handler = logging.Handler()
-    handler.emit = lambda r: records.append(r)  # type: ignore[method-assign]  # noqa: PLW0108
+    handler = _CollectingHandler(records)
     logger.addHandler(handler)
     try:
         set_probe_logger(get_stdlib_probe_logger("fast_healthchecks.probe.test_enabled"))
@@ -94,8 +104,7 @@ def test_stdlib_logger_redacts_extra() -> None:
     logger = get_stdlib_probe_logger(log_name)
     stdlib_logger = logging.getLogger(log_name)
     records: list[logging.LogRecord] = []
-    h = logging.Handler()
-    h.emit = lambda r: records.append(r)  # type: ignore[method-assign]  # noqa: PLW0108
+    h = _CollectingHandler(records)
     stdlib_logger.addHandler(h)
     stdlib_logger.setLevel(logging.DEBUG)
     try:
@@ -113,8 +122,7 @@ def test_stdlib_logger_redacts_nested_meta() -> None:
     logger = get_stdlib_probe_logger(log_name)
     stdlib_logger = logging.getLogger(log_name)
     records: list[logging.LogRecord] = []
-    h = logging.Handler()
-    h.emit = lambda r: records.append(r)  # type: ignore[method-assign]  # noqa: PLW0108
+    h = _CollectingHandler(records)
     stdlib_logger.addHandler(h)
     stdlib_logger.setLevel(logging.DEBUG)
     try:

@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import ssl as _ssl  # noqa: TC003
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 from fast_healthchecks.checks._base import DEFAULT_HC_TIMEOUT
+
+if TYPE_CHECKING:
+    from fast_healthchecks.checks.dsn_parsing import SslMode
 
 SecurityProtocol: TypeAlias = Literal["SSL", "PLAINTEXT", "SASL_PLAINTEXT", "SASL_SSL"]
 SaslMechanism: TypeAlias = Literal["PLAIN", "GSSAPI", "SCRAM-SHA-256", "SCRAM-SHA-512", "OAUTHBEARER"]
@@ -166,7 +169,7 @@ class PostgresAsyncPGConfig:
     user: str | None = None
     password: str | None = None
     database: str | None = None
-    ssl: _ssl.SSLContext | None = None
+    ssl: _ssl.SSLContext | SslMode | bool | None = None
     direct_tls: bool = False
     timeout: float = DEFAULT_HC_TIMEOUT
 

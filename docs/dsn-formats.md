@@ -11,6 +11,12 @@ Checks that support `from_dsn()` accept these URL schemes:
 | Kafka | `kafka://` | `kafka://broker1:9092,broker2:9092`, `kafka://user:pass@host:9092` |
 | OpenSearch | `http://` or `https://` | `https://admin:pass@localhost:9200` |
 
-## PostgreSQL TLS certificate rotation
+## PostgreSQL TLS
+
+The asyncpg check forwards `disable`, `allow`, `prefer`, `require`, `verify-ca`, and `verify-full` to asyncpg when no certificate files are configured, preserving the driver's native SSL-mode behavior. `verify-full` validates the server certificate and hostname; it does not require a client certificate.
+
+`sslrootcert` configures the CA used to verify the server. `sslcert` and `sslkey` are optional client-authentication material and must form a usable certificate chain. A key without a certificate is rejected.
+
+### Certificate rotation
 
 PostgreSQL checks (`verify-full`, `verify-ca`) cache the SSL context. After rotating certificates, restart the process or call `fast_healthchecks.checks.postgresql.base.create_ssl_context.cache_clear()` to avoid using stale contexts.

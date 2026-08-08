@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 
+from fast_healthchecks.redaction import redact_secrets_in_dict
+
 __all__ = (
     "HealthCheckError",
     "HealthCheckReport",
@@ -66,6 +68,10 @@ class HealthError:
     duration_ms: int = 0
     timeout_ms: int | None = None
     meta: dict[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Store a redacted copy so secrets are safe before serialization or logging."""
+        object.__setattr__(self, "meta", redact_secrets_in_dict(self.meta))
 
 
 @dataclass(frozen=True, init=False)

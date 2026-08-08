@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, final
-from urllib.parse import urlparse
 
 from fast_healthchecks.checks._base import (
     _CLIENT_CACHING_SLOTS,
@@ -24,7 +23,7 @@ from fast_healthchecks.models import HealthCheckResult
 from fast_healthchecks.utils import validate_host_ssrf_async, validate_url_ssrf
 
 try:
-    from httpx import AsyncClient, AsyncHTTPTransport, BasicAuth, Response
+    from httpx import AsyncClient, AsyncHTTPTransport, BasicAuth, Request, Response
 except ImportError as exc:
     raise_optional_import_error("httpx", "httpx", exc)
 
@@ -98,12 +97,20 @@ class UrlHealthCheck(ClientCachingMixin["AsyncClient"], ConfigDictMixin, HealthC
     def _create_client(self) -> AsyncClient:
         c = self._config
         transport = AsyncHTTPTransport(verify=c.verify_ssl)
+        event_hooks = {"request": [self._validate_outbound_request]} if c.block_private_hosts else None
         return AsyncClient(
             auth=self._auth,
             timeout=c.timeout,
             transport=transport,
             follow_redirects=c.follow_redirects,
+            event_hooks=event_hooks,
         )
+
+    @staticmethod
+    async def _validate_outbound_request(request: Request) -> None:
+        """Reject private destinations before each initial or redirected request."""
+        validate_url_ssrf(str(request.url), block_private_hosts=True)
+        await validate_host_ssrf_async(request.url.host)
 
     @healthcheck_safe(invalidate_on_error=True)
     async def __call__(self) -> HealthCheckResult:
@@ -115,10 +122,6 @@ class UrlHealthCheck(ClientCachingMixin["AsyncClient"], ConfigDictMixin, HealthC
         Returns:
             HealthCheckResult: Result with healthy=True if response is success.
         """
-        if self._config.block_private_hosts:
-            parsed = urlparse(self._config.url)
-            host = parsed.hostname or ""
-            await validate_host_ssrf_async(host)
         client = await self._ensure_client()
         response: Response = await client.get(self._config.url)
         if response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR or (

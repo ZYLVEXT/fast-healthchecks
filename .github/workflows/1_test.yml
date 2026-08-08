@@ -162,11 +162,10 @@ jobs:
             docker load -i "${{ env.COMPOSE_CACHE_PATH }}/images.tar"
           fi
 
-      # Pinned by tag: this Kotlin/JS action does not publish prebuilt index.mjs for commit SHA refs, only for release tags.
       - name: Set up WSL with Ubuntu (Windows)
         id: setup-wsl
         if: runner.os == 'Windows'
-        uses: Vampire/setup-wsl@v6.0.0  # v6
+        uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278  # v6.0.0
         with:
           distribution: Ubuntu-22.04
 
@@ -207,16 +206,18 @@ jobs:
           echo "REDIS_HOST=$WSL_IP" >> $GITHUB_ENV
           echo "RABBITMQ_HOST=$WSL_IP" >> $GITHUB_ENV
           echo "MONGO_HOSTS=$WSL_IP" >> $GITHUB_ENV
-          echo "OPENSEARCH_HOSTS=$WSL_IP:9200" >> $GITHUB_ENV
-          echo "KAFKA_BOOTSTRAP_SERVERS=$WSL_IP:9094,$WSL_IP:9095" >> $GITHUB_ENV
           # Ports for "Wait for WSL services" (from .env / docker-compose)
-          for key in POSTGRES_PORT REDIS_PORT RABBITMQ_PORT MONGO_PORT; do
+          for key in POSTGRES_PORT REDIS_PORT RABBITMQ_PORT MONGO_PORT OPENSEARCH_PORT KAFKA1_PORT KAFKA2_PORT; do
             val=$(grep -E "^${key}=" .env 2>/dev/null | cut -d= -f2-)
-            [ -z "$val" ] && case $key in POSTGRES_PORT) val=5432;; REDIS_PORT) val=6379;; RABBITMQ_PORT) val=5672;; MONGO_PORT) val=27017;; esac
+            [ -z "$val" ] && case $key in POSTGRES_PORT) val=5432;; REDIS_PORT) val=6379;; RABBITMQ_PORT) val=5672;; MONGO_PORT) val=27017;; OPENSEARCH_PORT) val=9200;; KAFKA1_PORT) val=9094;; KAFKA2_PORT) val=9095;; esac
             echo "${key}=${val}" >> $GITHUB_ENV
           done
-          echo "OPENSEARCH_PORT=9200" >> $GITHUB_ENV
-          echo "KAFKA_PORT=9094" >> $GITHUB_ENV
+          OPENSEARCH_PORT_VALUE=$(grep -E '^OPENSEARCH_PORT=' .env | cut -d= -f2-)
+          KAFKA1_PORT_VALUE=$(grep -E '^KAFKA1_PORT=' .env | cut -d= -f2-)
+          KAFKA2_PORT_VALUE=$(grep -E '^KAFKA2_PORT=' .env | cut -d= -f2-)
+          echo "OPENSEARCH_HOSTS=$WSL_IP:${OPENSEARCH_PORT_VALUE:-9200}" >> $GITHUB_ENV
+          echo "KAFKA_BOOTSTRAP_SERVERS=$WSL_IP:${KAFKA1_PORT_VALUE:-9094},$WSL_IP:${KAFKA2_PORT_VALUE:-9095}" >> $GITHUB_ENV
+          echo "KAFKA_PORT=${KAFKA1_PORT_VALUE:-9094}" >> $GITHUB_ENV
           # Integration app reads DSNs from env; override so readiness checks reach WSL services
           for key in POSTGRES_DSN REDIS_DSN RABBITMQ_DSN MONGO_DSN; do
             val=$(grep -E "^${key}=" .env 2>/dev/null | cut -d= -f2- | sed "s/localhost/$WSL_IP/g")
@@ -254,18 +255,6 @@ jobs:
               time.sleep(2)
           raise SystemExit('Timeout waiting for WSL services')
           "
-
-      - name: Print Python DSN env vars (diagnostic)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          echo "--- Python DSN env (diagnostic) ---"
-          uv run python -c "
-          import os
-          for key in ['POSTGRES_DSN', 'REDIS_DSN', 'RABBITMQ_DSN', 'MONGO_DSN', 'OPENSEARCH_HOSTS', 'KAFKA_BOOTSTRAP_SERVERS']:
-              print(f'{key}:', os.environ.get(key, 'NOT_SET'))
-          "
-          echo "------------------------------------"
 
       - name: Run all tests
         timeout-minutes: 5

@@ -63,8 +63,7 @@ async def map_report_to_asgi_http_response(  # noqa: PLR0913
     if content_obj is None:
         return b"", None, status_code
 
-    if isinstance(content_obj, dict):
-        content_obj = redact_secrets_in_dict(content_obj)
+    content_obj = redact_secrets_in_dict(content_obj)
 
     content = json.dumps(
         content_obj,

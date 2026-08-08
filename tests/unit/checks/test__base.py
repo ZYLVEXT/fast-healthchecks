@@ -153,6 +153,13 @@ class _CheckWithName:
     _name = "SafeCheck"
 
 
+class _CheckWithSyncInvalidator(_CheckWithName):
+    invalidated = False
+
+    def _invalidate_client(self) -> None:
+        self.invalidated = True
+
+
 @pytest.mark.asyncio
 async def test_healthcheck_safe_cancelled_error_propagates() -> None:
     """healthcheck_safe re-raises CancelledError; never wraps in HealthCheckResult."""
@@ -183,6 +190,22 @@ async def test_healthcheck_safe_exception_returns_result() -> None:
     assert result.name == "SafeCheck"
     assert result.error is not None
     assert "ValueError" in result.error.message
+
+
+@pytest.mark.asyncio
+async def test_healthcheck_safe_invalidation_is_optional() -> None:
+    """Invalidation handles checks without a hook and synchronous hooks."""
+
+    @healthcheck_safe(invalidate_on_error=True)
+    async def raises_value_error(self: _CheckWithName) -> HealthCheckResult:
+        await asyncio.sleep(0)
+        msg = "expected failure"
+        raise ValueError(msg)
+
+    assert (await raises_value_error(_CheckWithName())).healthy is False
+    check = _CheckWithSyncInvalidator()
+    assert (await raises_value_error(check)).healthy is False
+    assert check.invalidated is True
 
 
 def test_result_on_error_with_exception() -> None:

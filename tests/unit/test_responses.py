@@ -1,5 +1,6 @@
 """Tests for response mapping."""
 
+import asyncio
 from enum import IntEnum
 
 import pytest
@@ -26,20 +27,24 @@ async def _handler_that_returns_none(_response: ProbeAsgiResponse) -> dict | Non
     return None
 
 
-async def _healthy_handler(_response: ProbeAsgiResponse) -> dict:  # type: ignore[empty-body]
+async def _healthy_handler(_response: ProbeAsgiResponse) -> dict[str, str]:
     """Handler that returns dict for healthy response.
 
     Returns:
         Dict with status: healthy.
     """
+    await asyncio.sleep(0)
+    return {"status": "healthy"}
 
 
-async def _unhealthy_handler(_response: ProbeAsgiResponse) -> dict:  # type: ignore[empty-body]
+async def _unhealthy_handler(_response: ProbeAsgiResponse) -> dict[str, str]:
     """Handler that returns dict for unhealthy response.
 
     Returns:
         Dict with status: unhealthy.
     """
+    await asyncio.sleep(0)
+    return {"status": "unhealthy"}
 
 
 @pytest.mark.asyncio

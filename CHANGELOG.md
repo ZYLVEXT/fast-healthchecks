@@ -1,3 +1,18 @@
+## Unreleased
+
+### Fixes
+
+- **security**: redact nested sensitive metadata and validate every URL redirect against the SSRF policy
+- **postgresql**: preserve native asyncpg `sslmode` behavior and allow `verify-full` without a client certificate
+- **docker**: make published service ports configurable through `.env` and keep CI connection settings aligned
+- **ci**: stop printing credential-bearing DSNs in workflow logs
+- **docs**: align public API, lifecycle, execution, TLS, and test-matrix documentation with runtime behavior
+
+### Build
+
+- **packaging**: migrate builds to Hatchling with explicit wheel and source-distribution contents
+- **testing**: enforce 100% branch coverage across import, integration, and unit suites
+
 ## 1.0.0 (2026-03-13)
 
 ### Features

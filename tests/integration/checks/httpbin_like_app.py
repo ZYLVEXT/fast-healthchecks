@@ -6,16 +6,17 @@ import asyncio
 import base64
 
 from litestar import Litestar, Request, Response, get
+from litestar.params import FromPath  # noqa: TC002 - Litestar inspects this annotation at runtime
 
 
 @get("/status/{code:int}", sync_to_thread=False)
-def status(code: int) -> Response:
+def status(code: FromPath[int]) -> Response:
     """Return HTTP status from path /status/{code}."""
     return Response(content=b"", status_code=code)
 
 
 @get("/basic-auth/{user:str}/{passwd:str}", sync_to_thread=False)
-def basic_auth(request: Request, user: str, passwd: str) -> Response:
+def basic_auth(request: Request, user: FromPath[str], passwd: FromPath[str]) -> Response:
     """Return 200 if Authorization matches path user/passwd, else 401."""
     expected = base64.b64encode(f"{user}:{passwd}".encode()).decode()
     auth = request.headers.get("authorization", "")
@@ -25,7 +26,7 @@ def basic_auth(request: Request, user: str, passwd: str) -> Response:
 
 
 @get("/delay/{seconds:float}")
-async def delay(seconds: float) -> Response:
+async def delay(seconds: FromPath[float]) -> Response:
     """Wait path param seconds then return 200.
 
     Path: /delay/{seconds}.

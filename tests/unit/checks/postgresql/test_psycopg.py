@@ -1,6 +1,5 @@
 """Unit tests for PostgreSQLPsycopgHealthCheck."""
 
-import ssl
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 from urllib.parse import ParseResult, unquote, urlparse
@@ -8,7 +7,6 @@ from urllib.parse import ParseResult, unquote, urlparse
 import pytest
 from psycopg.connection_async import AsyncConnection, AsyncCursor
 
-from fast_healthchecks.checks.postgresql.base import create_ssl_context
 from fast_healthchecks.checks.postgresql.psycopg import PostgreSQLPsycopgHealthCheck
 from fast_healthchecks.errors import DEPENDENCY_UNHEALTHY
 from fast_healthchecks.utils import parse_query_string
@@ -1064,14 +1062,38 @@ def test__init(params: dict[str, Any], expected: dict[str, Any] | str, exception
         (
             ("postgresql+psycopg://postgres:pass@localhost:5432/db?sslmode=verify-full",),
             {},
-            "sslcert is required for verify-full",
-            ValueError,
+            {
+                "database": "db",
+                "host": "localhost",
+                "password": "pass",
+                "port": 5432,
+                "sslcert": None,
+                "sslkey": None,
+                "sslmode": "verify-full",
+                "sslrootcert": None,
+                "user": "postgres",
+                "timeout": 5.0,
+                "name": "PostgreSQL",
+            },
+            None,
         ),
         (
             (f"postgresql+psycopg://postgres:pass@localhost:5432/db?sslmode=verify-full&sslcert={TEST_SSLCERT}",),
             {},
-            "\\[SSL\\] PEM lib \\(_ssl.c:\\d+\\)",
-            ssl.SSLError,
+            {
+                "database": "db",
+                "host": "localhost",
+                "password": "pass",
+                "port": 5432,
+                "sslcert": unquote(TEST_SSLCERT),
+                "sslkey": None,
+                "sslmode": "verify-full",
+                "sslrootcert": None,
+                "user": "postgres",
+                "timeout": 5.0,
+                "name": "PostgreSQL",
+            },
+            None,
         ),
         (
             (
@@ -1171,8 +1193,6 @@ def test_from_dsn(
     query = parse_query_string(parse_result.query)
     files = [y for x, y in query.items() if x in {"sslcert", "sslkey", "sslrootcert"}]
     with create_temp_files(files):
-        if exception is None and isinstance(expected, dict) and "ssl" in expected and expected["ssl"] is not None:
-            expected["ssl"] = create_ssl_context(*expected["ssl"])
         assert_check_init(lambda: PostgreSQLPsycopgHealthCheck.from_dsn(*args, **kwargs), expected, exception)
 
 

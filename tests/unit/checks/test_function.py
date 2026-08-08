@@ -115,6 +115,13 @@ def test_init_raises_type_error_when_func_missing_with_config() -> None:
         FunctionHealthCheck(config=config, name="X")
 
 
+def test_init_accepts_func_with_explicit_config() -> None:
+    """Explicit config and callable form a valid check."""
+    config = FunctionConfig(timeout=1.0)
+    check = FunctionHealthCheck(config=config, func=dummy_sync_function, name="X")
+    assert check.to_dict() == {"args": [], "kwargs": {}, "timeout": 1.0, "name": "X"}
+
+
 @pytest.mark.asyncio
 async def test_sync_function_success() -> None:
     """Sync function check returns healthy."""

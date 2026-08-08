@@ -87,7 +87,8 @@ class Probe(NamedTuple):
         name: The name of the probe.
         checks: A sequence of health checks to run.
         summary: A summary of the probe. If not provided, a default summary will be generated.
-        default_check_timeout_ms: Default per-check timeout (ms) when check timeout is not set.
+        default_check_timeout_ms: Reserved legacy field. It does not alter execution;
+            use ``RunPolicy.probe_timeout_ms`` for a probe-wide timeout.
     """
 
     name: str
@@ -489,62 +490,57 @@ async def run_probe(
         probe=probe.name,
         checks_count=len(probe.checks),
     )
-    try:
-        if on_check_start is None and on_check_end is None:
-            results = await _gather_check_results(
-                probe,
-                timeout=timeout,
-                on_timeout_return_failure=on_timeout_return_failure,
-            )
-        else:
-
-            async def _run_with_hooks() -> list[HealthCheckResult]:
-                out: list[HealthCheckResult] = []
-                for i, check in enumerate(probe.checks):
-                    if on_check_start is not None:
-                        await on_check_start(check, i)
-                    result = await _run_check_safe(check, i)
-                    if on_check_end is not None:
-                        await on_check_end(check, i, result)
-                    out.append(result)
-                return out
-
-            try:
-                if timeout is not None:
-                    results = await asyncio.wait_for(_run_with_hooks(), timeout=timeout)
-                else:
-                    results = await _run_with_hooks()
-            except asyncio.TimeoutError:
-                if on_timeout_return_failure:
-                    results = [
-                        HealthCheckResult(
-                            name=_get_check_name(check, i),
-                            healthy=False,
-                            error=map_exception_to_health_error(
-                                HealthCheckTimeoutError("Probe timed out"),
-                                code=PROBE_TIMEOUT,
-                            ),
-                        )
-                        for i, check in enumerate(probe.checks)
-                    ]
-                else:
-                    raise HealthCheckTimeoutError(code=PROBE_TIMEOUT) from None
-
-        report = HealthCheckReport(
-            results=results,
+    if on_check_start is None and on_check_end is None:
+        results = await _gather_check_results(
+            probe,
+            timeout=timeout,
+            on_timeout_return_failure=on_timeout_return_failure,
         )
-        get_probe_logger().log(
-            logging.INFO,
-            "probe_end",
-            probe=probe.name,
-            healthy=report.healthy,
-            results_summary=[(r.name, r.healthy) for r in results],
-        )
-        return report
-    finally:
-        # Cleanup of cached clients is not done here; caller must call
-        # healthcheck_shutdown(probes) or close_probes(probes). See lifecycle docs.
-        pass
+    else:
+
+        async def _run_with_hooks() -> list[HealthCheckResult]:
+            out: list[HealthCheckResult] = []
+            for i, check in enumerate(probe.checks):
+                if on_check_start is not None:
+                    await on_check_start(check, i)
+                result = await _run_check_safe(check, i)
+                if on_check_end is not None:
+                    await on_check_end(check, i, result)
+                out.append(result)
+            return out
+
+        try:
+            if timeout is not None:
+                results = await asyncio.wait_for(_run_with_hooks(), timeout=timeout)
+            else:
+                results = await _run_with_hooks()
+        except asyncio.TimeoutError:
+            if on_timeout_return_failure:
+                results = [
+                    HealthCheckResult(
+                        name=_get_check_name(check, i),
+                        healthy=False,
+                        error=map_exception_to_health_error(
+                            HealthCheckTimeoutError("Probe timed out"),
+                            code=PROBE_TIMEOUT,
+                        ),
+                    )
+                    for i, check in enumerate(probe.checks)
+                ]
+            else:
+                raise HealthCheckTimeoutError(code=PROBE_TIMEOUT) from None
+
+    report = HealthCheckReport(
+        results=results,
+    )
+    get_probe_logger().log(
+        logging.INFO,
+        "probe_end",
+        probe=probe.name,
+        healthy=report.healthy,
+        results_summary=[(r.name, r.healthy) for r in results],
+    )
+    return report
 
 
 async def close_probes(probes: Iterable[Probe]) -> None:
@@ -565,9 +561,7 @@ async def close_probes(probes: Iterable[Probe]) -> None:
             aclose = getattr(check, "aclose", None)
             if callable(aclose):
                 with contextlib.suppress(Exception):
-                    maybe_awaitable = aclose()
-                    if isinstance(maybe_awaitable, Awaitable):
-                        await maybe_awaitable
+                    await aclose()
     # aiohttp (opensearch-py) may schedule cleanup across multiple loop turns.
     # Yield a few times so transport/socket finalizers run before teardown.
     await asyncio.sleep(0.1)

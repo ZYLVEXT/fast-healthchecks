@@ -32,14 +32,12 @@ class RunPolicy:
     """Immutable policy controlling probe execution behavior.
 
     Attributes:
-        mode: Controls how probe failures affect overall health status.
-            - "strict": Any failure marks the health check as failed
-            - "reporting": Failures are reported but don't fail the check
-        execution: Controls how probes are executed.
-            - "parallel": All probes run concurrently
-            - "sequential": Probes run one at a time
-        probe_timeout_ms: Optional timeout in milliseconds for each probe.
-            If None, probes use their default timeout.
+        mode: Controls probe-timeout handling. ``"strict"`` raises
+            ``HealthCheckTimeoutError``; ``"reporting"`` returns failed results.
+        execution: Controls how checks within one probe are executed.
+            - "parallel": All checks run concurrently
+            - "sequential": Checks run one at a time
+        probe_timeout_ms: Optional timeout in milliseconds for one ``run()`` call.
         health_evaluation: Controls evaluation strategy.
             - "all_required": All probes must pass for overall health
             - "partial_allowed": Some probes can fail without failing overall

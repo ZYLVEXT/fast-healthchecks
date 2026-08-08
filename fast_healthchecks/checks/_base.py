@@ -99,6 +99,9 @@ class _HasName(Protocol):
     _name: str
 
 
+_SelfT = TypeVar("_SelfT", bound=_HasName)
+
+
 class _ConfigWithToDict(Protocol):
     def to_dict(self) -> dict[str, Any]: ...
 
@@ -107,8 +110,8 @@ def healthcheck_safe(
     *,
     invalidate_on_error: bool = False,
 ) -> Callable[
-    [Callable[Concatenate[_HasName, P], Awaitable[HealthCheckResult]]],
-    Callable[Concatenate[_HasName, P], Awaitable[HealthCheckResult]],
+    [Callable[Concatenate[_SelfT, P], Awaitable[HealthCheckResult]]],
+    Callable[Concatenate[_SelfT, P], Awaitable[HealthCheckResult]],
 ]:
     """Decorator that catches exceptions and returns a failed HealthCheckResult.
 
@@ -123,11 +126,11 @@ def healthcheck_safe(
     """
 
     def decorator(
-        method: Callable[Concatenate[_HasName, P], Awaitable[HealthCheckResult]],
-    ) -> Callable[Concatenate[_HasName, P], Awaitable[HealthCheckResult]]:
+        method: Callable[Concatenate[_SelfT, P], Awaitable[HealthCheckResult]],
+    ) -> Callable[Concatenate[_SelfT, P], Awaitable[HealthCheckResult]]:
         @functools.wraps(method)
         async def wrapper(
-            self: _HasName,
+            self: _SelfT,
             *args: P.args,
             **kwargs: P.kwargs,
         ) -> HealthCheckResult:
