@@ -39,6 +39,10 @@ def main() -> None:
             [
                 uv_executable,
                 "run",
+                "--frozen",
+                "--all-extras",
+                "--group",
+                "dev",
                 "pip-audit",
                 "--disable-pip",
                 "--require-hashes",

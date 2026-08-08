@@ -93,7 +93,7 @@ jobs:
       - name: Prepare release notes
         run: |
           set -euo pipefail
-          awk '/^## [0-9]+\\.[0-9]+\\.[0-9]+ / {if(d) exit; d=1; next} d && /^## / {exit} d {print}' CHANGELOG.md > release_body.md
+          awk '/^## [0-9]+\.[0-9]+\.[0-9]+ / {if(d) exit; d=1; next} d && /^## / {exit} d {print}' CHANGELOG.md > release_body.md
           if ! grep -q '[^[:space:]]' release_body.md; then
             echo "::error::Release notes for the first CHANGELOG entry are empty."
             exit 1
