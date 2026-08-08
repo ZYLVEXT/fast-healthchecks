@@ -14,6 +14,8 @@
 - **docker**: make published service ports configurable through `.env` and keep CI connection settings aligned
 - **ci**: stop printing credential-bearing DSNs in workflow logs
 - **ci**: restore example service configuration in the cross-platform unit matrix and limit collection to unit tests
+- **packaging**: make the Psycopg extra self-contained across supported operating systems
+- **testing**: remove scheduler-sensitive timing margins from function-check tests
 - **lifecycle**: close FastAPI example routers and temporary test files when setup or execution fails
 - **docs**: align public API, lifecycle, execution, TLS, and test-matrix documentation with runtime behavior
 

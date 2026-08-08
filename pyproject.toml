@@ -38,7 +38,7 @@ tracker = "https://github.com/ZYLVEXT/fast-healthchecks/issues"
 
 [project.optional-dependencies]
 asyncpg = ["asyncpg>=0.31.0,<1.0.0"]
-psycopg = ["psycopg>=3.3.3,<4.0.0"]
+psycopg = ["psycopg[binary]>=3.3.3,<4.0.0"]
 redis = ["redis>=7.3.0,<8.0.0"]
 aio-pika = ["aio-pika>=9.6.1,<10.0.0"]
 httpx = ["httpx>=0.28.1,<1.0.0"]

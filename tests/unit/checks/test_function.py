@@ -125,7 +125,7 @@ def test_init_accepts_func_with_explicit_config() -> None:
 @pytest.mark.asyncio
 async def test_sync_function_success() -> None:
     """Sync function check returns healthy."""
-    check = FunctionHealthCheck(func=dummy_sync_function, args=("arg",), kwargs={"kwarg": 2}, timeout=0.2)
+    check = FunctionHealthCheck(func=dummy_sync_function, args=("arg",), kwargs={"kwarg": 2}, timeout=1.0)
     result = await check()
     assert result == HealthCheckResult(name="Function", healthy=True)
 
@@ -133,7 +133,7 @@ async def test_sync_function_success() -> None:
 @pytest.mark.asyncio
 async def test_sync_function_failure() -> None:
     """Sync function check captures exception."""
-    check = FunctionHealthCheck(func=dummy_sync_function_fail, args=("arg",), kwargs={"kwarg": 2}, timeout=0.2)
+    check = FunctionHealthCheck(func=dummy_sync_function_fail, args=("arg",), kwargs={"kwarg": 2}, timeout=1.0)
     result = await check()
     assert result.healthy is False
     assert result.error is not None
@@ -143,7 +143,7 @@ async def test_sync_function_failure() -> None:
 @pytest.mark.asyncio
 async def test_async_function_success() -> None:
     """Async function check returns healthy."""
-    check = FunctionHealthCheck(func=dummy_async_function, args=("arg",), kwargs={"kwarg": 2}, timeout=0.2)
+    check = FunctionHealthCheck(func=dummy_async_function, args=("arg",), kwargs={"kwarg": 2}, timeout=1.0)
     result = await check()
     assert result == HealthCheckResult(name="Function", healthy=True)
 
@@ -151,7 +151,7 @@ async def test_async_function_success() -> None:
 @pytest.mark.asyncio
 async def test_async_function_failure() -> None:
     """Async function check captures exception."""
-    check = FunctionHealthCheck(func=dummy_async_function_fail, args=("arg",), kwargs={"kwarg": 2}, timeout=0.2)
+    check = FunctionHealthCheck(func=dummy_async_function_fail, args=("arg",), kwargs={"kwarg": 2}, timeout=1.0)
     result = await check()
     assert result.healthy is False
     assert result.error is not None
