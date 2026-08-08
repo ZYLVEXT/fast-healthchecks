@@ -1,22 +1,38 @@
-"""Framework-agnostic health checks for ASGI apps (FastAPI, FastStream, Litestar).
+"""Framework-neutral health checks with lazy public exports."""
 
-Optional backends and framework integrations are available as install extras.
-See the project's pyproject.toml for extra names (e.g. asyncpg, redis, fastapi).
-"""
+# ruff: noqa: RUF067
 
-from fast_healthchecks.checks import FunctionConfig
-from fast_healthchecks.checks.types import Check
-from fast_healthchecks.execution import ProbeRunner, RunPolicy
-from fast_healthchecks.integrations.base import Probe
-from fast_healthchecks.models import (
-    HealthCheckError,
-    HealthCheckReport,
-    HealthCheckResult,
-    HealthCheckSSRFError,
-    HealthCheckTimeoutError,
-)
+from __future__ import annotations
 
-__version__ = "1.0.0"
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from fast_healthchecks.checks.configs import FunctionConfig
+    from fast_healthchecks.checks.types import Check
+    from fast_healthchecks.execution import Probe, ProbeRunner, RunPolicy
+    from fast_healthchecks.models import (
+        HealthCheckError,
+        HealthCheckReport,
+        HealthCheckResult,
+        HealthCheckSSRFError,
+        HealthCheckTimeoutError,
+    )
+
+__version__ = "1.1.0"
+
+_EXPORTS = {
+    "Check": ("fast_healthchecks.checks.types", "Check"),
+    "FunctionConfig": ("fast_healthchecks.checks.configs", "FunctionConfig"),
+    "HealthCheckError": ("fast_healthchecks.models", "HealthCheckError"),
+    "HealthCheckReport": ("fast_healthchecks.models", "HealthCheckReport"),
+    "HealthCheckResult": ("fast_healthchecks.models", "HealthCheckResult"),
+    "HealthCheckSSRFError": ("fast_healthchecks.models", "HealthCheckSSRFError"),
+    "HealthCheckTimeoutError": ("fast_healthchecks.models", "HealthCheckTimeoutError"),
+    "Probe": ("fast_healthchecks.execution", "Probe"),
+    "ProbeRunner": ("fast_healthchecks.execution", "ProbeRunner"),
+    "RunPolicy": ("fast_healthchecks.execution", "RunPolicy"),
+}
 
 __all__ = (
     "Check",
@@ -31,3 +47,27 @@ __all__ = (
     "RunPolicy",
     "__version__",
 )
+
+
+def __getattr__(name: str) -> Any:  # noqa: ANN401
+    """Load a public symbol only when first accessed.
+
+    Returns:
+        The requested public object.
+
+    Raises:
+        AttributeError: If ``name`` is not part of the public API.
+    """
+    target = _EXPORTS.get(name)
+    if target is None:
+        msg = f"module {__name__!r} has no attribute {name!r}"
+        raise AttributeError(msg)
+    module_name, attribute = target
+    value = getattr(import_module(module_name), attribute)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    """Return eager and lazy public attributes for interactive discovery."""
+    return sorted({*globals(), *__all__})

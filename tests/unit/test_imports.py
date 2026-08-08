@@ -1,10 +1,30 @@
 """Tests for optional-check import errors and install hints."""
 
 import importlib
+import json
+import subprocess
+import sys
 
 import pytest
 
 pytestmark = pytest.mark.imports
+
+
+def test_root_import_is_lazy() -> None:
+    """Importing the root does not load execution, models, configs, or integrations."""
+    command = (
+        "import json, sys; import fast_healthchecks; "
+        "print(json.dumps(sorted(name for name in sys.modules if name.startswith('fast_healthchecks'))))"
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", command],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert json.loads(completed.stdout) == ["fast_healthchecks"]
 
 
 def test_probe_runner_is_main_entrypoint() -> None:
@@ -15,6 +35,25 @@ def test_probe_runner_is_main_entrypoint() -> None:
     assert hasattr(pkg, "RunPolicy"), "RunPolicy must be in root __all__"
     assert "ProbeRunner" in pkg.__all__
     assert "RunPolicy" in pkg.__all__
+
+
+def test_root_directory_lists_lazy_exports() -> None:
+    """Interactive discovery includes symbols that have not been loaded yet."""
+    pkg = importlib.import_module("fast_healthchecks")
+
+    assert "HealthCheckReport" in dir(pkg)
+
+
+def test_checks_package_loads_configs_and_protocols_lazily() -> None:
+    """The checks package resolves both lazy export groups and rejects unknown names."""
+    checks = importlib.import_module("fast_healthchecks.checks")
+
+    assert checks.RedisConfig.__name__ == "RedisConfig"
+    assert checks.HealthCheck.__name__ == "HealthCheck"
+    assert "UrlConfig" in dir(checks)
+    unknown_name = "unknown_export"
+    with pytest.raises(AttributeError, match="unknown_export"):
+        getattr(checks, unknown_name)
 
 
 def test_run_probe_not_in_root_api() -> None:

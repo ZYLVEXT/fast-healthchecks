@@ -225,7 +225,6 @@ class ClientCachingMixin(ABC, Generic[ClientT]):
                 await self._close_client_fn(self._client)
                 self._client = None
                 self._client_loop = None
-        await asyncio.sleep(0.1)
 
     async def _ensure_client(self) -> ClientT:
         """Return cached client, creating or recreating if needed.
@@ -268,7 +267,6 @@ class ClientCachingMixin(ABC, Generic[ClientT]):
                     await self._close_client_fn(self._client)
                 self._client = None
                 self._client_loop = None
-        await asyncio.sleep(0.1)
 
 
 class HealthCheck(Protocol[T_co]):

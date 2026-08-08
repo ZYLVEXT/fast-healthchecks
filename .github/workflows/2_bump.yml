@@ -1,104 +1,135 @@
-name: Bump version
+name: Tag prepared release
 
 on:
   workflow_dispatch:
-    inputs:
-      increment:
-        description: "Version increment type"
-        required: false
-        default: ""
-        type: choice
-        options:
-          - ""
-          - "PATCH"
-          - "MINOR"
-          - "MAJOR"
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: release-operations
   cancel-in-progress: false
 
 jobs:
-  bump:
-    name: Bump version and release
-    if: "github.event.head_commit == null || !startsWith(github.event.head_commit.message, 'bump:')"
+  release:
+    name: Tag prepared version and release
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    environment: release-operations
+    permissions:
+      actions: write
+      contents: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
           fetch-depth: 0
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7.3.1
-        with:
-          enable-cache: true
-          cache-python: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Set up Python
-        run: uv python install 3.14
-
-      - name: Install dev dependencies
-        run: uv sync --group=dev
-
-      - name: Get next version
-        id: get_version
-        run: |
-          if [ -n "${{ inputs.increment }}" ]; then
-            NEXT=$(uv run cz bump --get-next --increment "${{ inputs.increment }}")
-          else
-            NEXT=$(uv run cz bump --get-next)
-          fi
-          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
-
-      - name: Replace Unreleased header in CHANGELOG
-        id: unreleased
-        run: |
-          if grep -q '^## Unreleased' CHANGELOG.md; then
-            DATE=$(date -u +%Y-%m-%d)
-            sed -i.bak "s/^## Unreleased.*/## ${{ steps.get_version.outputs.version }} ($DATE)/" CHANGELOG.md
-            rm -f CHANGELOG.md.bak
-            echo "replaced=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "replaced=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Bump version and changelog
-        id: bump
-        uses: commitizen-tools/commitizen-action@338bbd841b75aaee6bf5340e1fa12f6ab58ff9ff  # v0.27.1
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          increment: ${{ inputs.increment }}
-          changelog: ${{ steps.unreleased.outputs.replaced != 'true' }}
-          commit: ${{ steps.unreleased.outputs.replaced != 'true' }}
-          push: ${{ steps.unreleased.outputs.replaced != 'true' }}
+          python-version: "3.12"
 
-      - name: Commit, tag and push (single commit when using custom changelog)
-        if: steps.unreleased.outputs.replaced == 'true'
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.3"
+          enable-cache: false
+
+      - name: Validate prepared release
+        id: release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md pyproject.toml fast_healthchecks/__init__.py
-          git commit -m "bump: version ${{ steps.bump.outputs.previous_version }} → ${{ steps.bump.outputs.version }}"
-          git tag "${{ steps.bump.outputs.version }}"
-          git push origin HEAD --tags
+          set -euo pipefail
+          uv lock --check
+          VERSION=$(python scripts/release_artifacts.py version)
+          tag_exists=false
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            if [ "$(git rev-parse "refs/tags/$VERSION^{commit}")" != "$(git rev-parse HEAD)" ]; then
+              echo "::error::Version $VERSION is already tagged at a different release point."
+              exit 1
+            fi
+            tag_exists=true
+          fi
+          latest_version=$(git tag --list --sort=-version:refname | awk '/^[0-9]+\.[0-9]+\.[0-9]+$/ && latest == "" {latest=$0} END {print latest}')
+          if [ -n "$latest_version" ]; then
+            version_args=(python scripts/release_artifacts.py version --latest-tag "$latest_version")
+            if [ "$tag_exists" = "true" ]; then
+              version_args+=(--resume)
+            fi
+            "${version_args[@]}" >/dev/null
+          fi
+
+          draft_output=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.draft) | .tag_name')
+          drafts=()
+          if [ -n "$draft_output" ]; then
+            mapfile -t drafts <<< "$draft_output"
+          fi
+          for draft in "${drafts[@]}"; do
+            if [ "$tag_exists" != "true" ] || [ "$draft" != "$VERSION" ]; then
+              echo "::error::Draft release $draft must finish before another release starts."
+              exit 1
+            fi
+          done
+          if grep -q '^## Unreleased' CHANGELOG.md; then
+            echo "::error::Release commit must contain a finalized CHANGELOG without an Unreleased section."
+            exit 1
+          fi
+          first_release=$(awk '/^## [0-9]+\.[0-9]+\.[0-9]+ \(/ {print $2; exit}' CHANGELOG.md)
+          if [ "$first_release" != "$VERSION" ]; then
+            echo "::error::The first CHANGELOG release ($first_release) does not match $VERSION."
+            exit 1
+          fi
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Release must tag an already-prepared clean commit."
+            git status --short
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Prepare release notes
-        id: release_notes
         run: |
-          awk '/^## [0-9]+\.[0-9]+\.[0-9]+ / {if(d) exit; d=1; next} d && /^## / {exit} d {print}' CHANGELOG.md > release_body.md
-          echo "path=release_body.md" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          awk '/^## [0-9]+\\.[0-9]+\\.[0-9]+ / {if(d) exit; d=1; next} d && /^## / {exit} d {print}' CHANGELOG.md > release_body.md
+          if ! grep -q '[^[:space:]]' release_body.md; then
+            echo "::error::Release notes for the first CHANGELOG entry are empty."
+            exit 1
+          fi
 
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b  # v2.5.0
-        with:
-          tag_name: ${{ steps.bump.outputs.version }}
-          body_path: release_body.md
+      - name: Push the exact branch and tag
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! git show-ref --verify --quiet "refs/tags/$VERSION"; then
+            git tag "$VERSION"
+          fi
+          remote="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --atomic "$remote" "HEAD:refs/heads/$BRANCH" "refs/tags/$VERSION:refs/tags/$VERSION"
+
+      - name: Create draft GitHub release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          if is_draft=$(gh release view "$VERSION" --repo "$GH_REPO" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$is_draft" != "true" ]; then
+              echo "::error::GitHub release $VERSION is already published."
+              exit 1
+            fi
+          else
+            gh release create "$VERSION" --repo "$GH_REPO" --verify-tag --draft --title "$VERSION" --notes-file release_body.md
+          fi
+
+      - name: Run Tests for the prepared commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: gh workflow run 1_test.yml --repo "$GITHUB_REPOSITORY" --ref "$VERSION"

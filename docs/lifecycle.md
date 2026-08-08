@@ -40,7 +40,8 @@ flowchart TD
 
 ## ProbeRunner (Advanced)
 
-`ProbeRunner` is a context manager that automatically manages probe lifecycle and cleanup:
+`ProbeRunner` is a context manager that automatically tracks only checks exposing `aclose()` and
+closes each unique resource-owning check once. Stateless probes are not retained:
 
 ```python
 from fast_healthchecks import Probe, ProbeRunner, RunPolicy

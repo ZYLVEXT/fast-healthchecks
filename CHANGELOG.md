@@ -1,4 +1,11 @@
-## Unreleased
+## 1.1.0 (2026-08-08)
+
+### Features
+
+- **performance**: keep root imports lazy, skip body serialization for `204`, avoid disabled-log payloads, and remove scheduler hops from sequential probes
+- **execution**: move probe execution and lifecycle ownership into the framework-neutral core and use direct sequential execution
+- **lifecycle**: retain only resource-owning checks, deduplicate shared checks, and consolidate transport cleanup into one grace period
+- **release**: add immutable tag-bound tests, reproducible artifacts, CycloneDX SBOMs, build attestations, Trusted Publishing, and guarded documentation deployment
 
 ### Fixes
 

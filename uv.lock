@@ -853,7 +853,7 @@ pydantic = [
 
 [[package]]
 name = "fast-healthchecks"
-version = "1.0.0"
+version = "1.1.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
@@ -908,6 +908,7 @@ dev = [
     { name = "python-dotenv" },
     { name = "ruff" },
     { name = "rust-just" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "ty" },
 ]
 docs = [
@@ -949,6 +950,7 @@ dev = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "ruff", specifier = ">=0.15.6" },
     { name = "rust-just", specifier = ">=1.46.0" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.4.1" },
     { name = "ty", specifier = ">=0.0.23" },
 ]
 docs = [

@@ -5,6 +5,7 @@ from enum import IntEnum
 
 import pytest
 
+import fast_healthchecks.responses as responses_module
 from fast_healthchecks.models import HealthCheckReport, HealthCheckResult
 from fast_healthchecks.responses import ProbeAsgiResponse, map_report_to_asgi_http_response
 
@@ -87,11 +88,16 @@ async def test_map_report_to_asgi_http_response_debug_unhealthy_includes_data() 
 
 
 @pytest.mark.asyncio
-async def test_map_report_to_asgi_http_response_no_content_status() -> None:
+async def test_map_report_to_asgi_http_response_no_content_status(monkeypatch: pytest.MonkeyPatch) -> None:
     """When status is NO_CONTENT (204), no body is returned regardless of handler."""
     report = HealthCheckReport(
         results=[HealthCheckResult(name="test", healthy=True)],
     )
+
+    def fail_asdict(_report: object, **_kwargs: object) -> dict[str, object]:
+        pytest.fail("A bodyless response must not serialize its report")
+
+    monkeypatch.setattr(responses_module, "asdict", fail_asdict)
     body, headers, status = await map_report_to_asgi_http_response(
         report,
         debug=False,

@@ -47,6 +47,16 @@ async def test_close_probes_empty_iterable() -> None:
 
 
 @pytest.mark.asyncio
+async def test_close_probes_closes_shared_check_once() -> None:
+    """A check shared by multiple probes is closed once."""
+    check = CheckWithAclose(name="A")
+
+    await close_probes([Probe(name="one", checks=[check]), Probe(name="two", checks=[check])])
+
+    check._aclose_mock.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
 async def test_healthcheck_shutdown_returns_callable_that_closes_probes() -> None:
     """healthcheck_shutdown(probes) returns an async callable that closes those probes."""
     check = CheckWithAclose(name="A")

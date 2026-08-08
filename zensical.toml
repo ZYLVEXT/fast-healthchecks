@@ -19,6 +19,7 @@ nav = [
     {"Changelog" = "changelog.md"},
     {"Style guide" = "style-guide.md"},
     {"Contributing" = "contributing.md"},
+    {"Releasing" = "releasing.md"},
     {"Security" = "security.md"},
     {"Decisions" = [
         {"Index" = "decisions/README.md"},

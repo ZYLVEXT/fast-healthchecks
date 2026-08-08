@@ -1,5 +1,6 @@
 """Tests for optional probe logging (OBS-1)."""
 
+import asyncio
 import logging
 
 import pytest
@@ -12,6 +13,7 @@ from fast_healthchecks.logging import (
     get_stdlib_probe_logger,
     set_probe_logger,
 )
+from fast_healthchecks.models import HealthCheckResult
 from fast_healthchecks.utils import REDACT_PLACEHOLDER, redact_secrets_in_dict
 
 pytestmark = pytest.mark.unit
@@ -93,6 +95,35 @@ async def test_when_logging_enabled_probe_start_and_end_logged() -> None:
         messages = [r.msg for r in records]
         assert "probe_start" in messages
         assert "probe_end" in messages
+    finally:
+        logger.removeHandler(handler)
+        set_probe_logger(NullLogger())
+
+
+@pytest.mark.asyncio
+async def test_when_logging_enabled_check_exception_is_logged() -> None:
+    """A check exception emits a failed check_end record without escaping."""
+
+    async def _failing_check() -> HealthCheckResult:
+        await asyncio.sleep(0)
+        msg = "dependency failed"
+        raise RuntimeError(msg)
+
+    records: list[logging.LogRecord] = []
+    log_name = "fast_healthchecks.probe.test_failure"
+    logger = logging.getLogger(log_name)
+    logger.setLevel(logging.DEBUG)
+    handler = _CollectingHandler(records)
+    logger.addHandler(handler)
+    try:
+        set_probe_logger(get_stdlib_probe_logger(log_name))
+        report = await run_probe(Probe(name="p", checks=[_failing_check]))
+
+        assert report.healthy is False
+        failed_check_records = [
+            record for record in records if record.msg == "check_end" and getattr(record, "healthy", None) is False
+        ]
+        assert len(failed_check_records) == 1
     finally:
         logger.removeHandler(handler)
         set_probe_logger(NullLogger())

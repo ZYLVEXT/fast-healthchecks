@@ -4,7 +4,7 @@ For CLI scripts, cron jobs, or tests, use `run_probe` instead of mounting ASGI r
 
 ```python
 import asyncio
-from fast_healthchecks.integrations.base import Probe, run_probe
+from fast_healthchecks.execution import Probe, run_probe
 from fast_healthchecks.checks.function import FunctionHealthCheck
 
 async def main():
@@ -34,7 +34,7 @@ Example: record check duration with a simple metrics callback (store start times
 ```python
 import time
 from fast_healthchecks.checks.types import Check
-from fast_healthchecks.integrations.base import Probe, run_probe
+from fast_healthchecks.execution import Probe, run_probe
 from fast_healthchecks.models import HealthCheckResult
 
 starts: dict[int, float] = {}

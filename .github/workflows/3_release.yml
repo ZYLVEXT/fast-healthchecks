@@ -1,152 +1,250 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: ["Tests"]
-    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tests_run_id:
+        description: Successful tag-bound Tests workflow run ID
+        required: true
+        type: string
+
+permissions: {}
+
+env:
+  UV_CACHE_VERSION: v1
+
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   check-tag:
     name: Verify release trigger
     runs-on: ubuntu-latest
-    timeout-minutes: 2
-    if: github.event.repository.fork == false && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    timeout-minutes: 3
     permissions:
-      contents: read
+      actions: read
+      contents: write
     outputs:
       is_tag: ${{ steps.tag.outputs.is_tag }}
       tag: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Verify HEAD is tagged
+          persist-credentials: false
+
+      - name: Verify immutable tag and successful Tests run
         id: tag
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_SHA: ${{ github.sha }}
+          TESTS_RUN_ID: ${{ inputs.tests_run_id }}
         run: |
-          T=$(git describe --tags --exact-match HEAD 2>/dev/null) || true
-          if [ -n "$T" ]; then echo "is_tag=true" >> $GITHUB_OUTPUT; echo "tag=$T" >> $GITHUB_OUTPUT; else echo "is_tag=false" >> $GITHUB_OUTPUT; echo "tag=" >> $GITHUB_OUTPUT; fi
+          set -euo pipefail
+          if [[ "$RELEASE_REF" != refs/tags/* ]] || [[ ! "$TESTS_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "Release requires an immutable tag and numeric Tests run ID." >&2
+            exit 1
+          fi
+          mapfile -t tags < <(git tag --points-at HEAD)
+          if [ "${#tags[@]}" -ne 1 ]; then
+            echo "Expected exactly one tag on the tested commit, found: ${tags[*]}" >&2
+            exit 1
+          fi
+          TAG="${tags[0]}"
+          VERSION=$(python scripts/release_artifacts.py version)
+          if [ "$RELEASE_REF" != "refs/tags/$TAG" ] || [ "$TAG" != "$VERSION" ]; then
+            echo "Release ref, tag, and project version do not agree." >&2
+            exit 1
+          fi
+          if [ "$(gh release view "$TAG" --repo "$GH_REPO" --json isDraft --jq .isDraft)" != "true" ]; then
+            echo "GitHub release $TAG is missing or is not a draft." >&2
+            exit 1
+          fi
+          bump_run_count=$(gh api "repos/$GH_REPO/actions/workflows/2_bump.yml/runs?branch=$DEFAULT_BRANCH&event=workflow_dispatch&status=success&head_sha=$RELEASE_SHA&per_page=1" --jq '.total_count')
+          if [ "$bump_run_count" -lt 1 ]; then
+            echo "No protected release-operations run proves this exact commit." >&2
+            exit 1
+          fi
+          tests_workflow_id=$(gh api "repos/$GH_REPO/actions/workflows/1_test.yml" --jq .id)
+          test_run=$(gh api "repos/$GH_REPO/actions/runs/$TESTS_RUN_ID")
+          if ! jq -e --arg sha "$RELEASE_SHA" --arg tag "$TAG" --argjson workflow_id "$tests_workflow_id" \
+            '.status == "completed" and .conclusion == "success" and .event == "workflow_dispatch" and .head_sha == $sha and .head_branch == $tag and .workflow_id == $workflow_id' \
+            <<< "$test_run" >/dev/null; then
+            echo "Tests run $TESTS_RUN_ID does not prove this exact tagged commit." >&2
+            exit 1
+          fi
+          draft_output=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.draft) | .tag_name')
+          drafts=()
+          if [ -n "$draft_output" ]; then mapfile -t drafts <<< "$draft_output"; fi
+          if [ "${#drafts[@]}" -ne 1 ] || [ "${drafts[0]}" != "$TAG" ]; then
+            echo "Expected $TAG to be the only draft release, found: ${drafts[*]}" >&2
+            exit 1
+          fi
+          echo "is_tag=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
   reproducible-build:
-    name: Reproducible build verification
+    name: Reproducible build and provenance
     needs: [check-tag]
-    timeout-minutes: 5
     if: needs.check-tag.outputs.is_tag == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
+      attestations: write
       contents: read
+      id-token: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7.3.1
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
+          version: "0.12.3"
+          python-version: "3.12"
           enable-cache: true
+          cache-dependency-glob: ""
+          cache-suffix: ${{ env.UV_CACHE_VERSION }}
+          prune-cache: true
           cache-python: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
-        run: uv python install 3.14
-
-      - name: First build (from lockfile)
+      - name: Build twice from the lockfile
         env:
+          DIST1: ${{ runner.temp }}/dist1
+          DIST2: ${{ runner.temp }}/dist2
           SOURCE_DATE_EPOCH: "0"
         run: |
-          uv sync --frozen --group=dev --all-extras
-          uv build
-          mkdir -p dist1 && cp dist/*.whl dist/*.tar.gz dist1/
+          uv sync --frozen --group dev --all-extras
+          uv run --no-sync python scripts/release_artifacts.py build --dist-dir "$DIST1"
+          uv run --no-sync python scripts/release_artifacts.py build --dist-dir "$DIST2"
+          uv run --no-sync python scripts/release_artifacts.py compare --first "$DIST1" --second "$DIST2"
+          uv run --no-sync python scripts/release_artifacts.py smoke --dist-dir "$DIST1"
 
-      - name: Second build (same environment)
+      - name: Generate deterministic CycloneDX SBOM
         env:
-          SOURCE_DATE_EPOCH: "0"
+          SBOM_CHECK_DIR: ${{ runner.temp }}/sbom-check
+          SBOM_DIR: ${{ runner.temp }}/sbom
         run: |
-          rm -rf dist build src/*.egg-info *.egg-info 2>/dev/null || true
-          uv sync --frozen --group=dev --all-extras
-          uv build
-          mkdir -p dist2 && cp dist/*.whl dist/*.tar.gz dist2/
-
-      # Only assert reproducibility for wheels; sdist (tar.gz) often has non-determinism
-      # (gzip mtime, setuptools metadata). We still build and publish sdist.
-      - name: Compare wheel hashes
-        run: |
-          for f in dist1/*.whl; do
-            name=$(basename "$f")
-            h1=$(sha256sum "dist1/$name" | cut -d' ' -f1)
-            h2=$(sha256sum "dist2/$name" | cut -d' ' -f1)
-            if [ "$h1" != "$h2" ]; then
-              echo "Hash mismatch for $name"
-              exit 1
-            fi
-            echo "OK $name"
+          set -euo pipefail
+          mkdir -p "$SBOM_DIR" "$SBOM_CHECK_DIR"
+          VERSION=$(python scripts/release_artifacts.py version)
+          serial_number=$(python -c 'import sys; from uuid import NAMESPACE_URL, uuid5; print(f"urn:uuid:{uuid5(NAMESPACE_URL, sys.argv[1])}")' "https://github.com/$GITHUB_REPOSITORY/releases/tag/$VERSION#fast-healthchecks")
+          timestamp=$(git show -s --format=%cI "$GITHUB_SHA")
+          for output_dir in "$SBOM_DIR" "$SBOM_CHECK_DIR"; do
+            raw=$(mktemp)
+            uv export --preview-features sbom-export --frozen --all-extras --no-default-groups --format cyclonedx1.5 --output-file "$raw"
+            jq -cS --arg serial_number "$serial_number" --arg timestamp "$timestamp" \
+              '."$schema" = "https://cyclonedx.org/schema/bom-1.7.schema.json" | .specVersion = "1.7" | .serialNumber = $serial_number | .metadata.timestamp = $timestamp' \
+              "$raw" > "$output_dir/fast-healthchecks-$VERSION.cdx.json"
           done
-          echo "Reproducible: wheel hashes match (same runner, Python 3.14, lockfile, SOURCE_DATE_EPOCH=0)."
+          jq -e --arg name "fast-healthchecks" --arg version "$VERSION" \
+            '.bomFormat == "CycloneDX" and .specVersion == "1.7" and .metadata.component.name == $name and .metadata.component.version == $version' \
+            "$SBOM_DIR/fast-healthchecks-$VERSION.cdx.json" >/dev/null
+          cmp "$SBOM_DIR/fast-healthchecks-$VERSION.cdx.json" "$SBOM_CHECK_DIR/fast-healthchecks-$VERSION.cdx.json"
 
-      - name: Upload verified dist
-        run: mkdir -p dist && cp dist1/* dist/
-      - name: Upload dist
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+      - name: Attest distribution provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/dist1/*.whl
+            ${{ runner.temp }}/dist1/*.tar.gz
+
+      - name: Attest distribution SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/dist1/*.whl
+            ${{ runner.temp }}/dist1/*.tar.gz
+          sbom-path: ${{ runner.temp }}/sbom/fast-healthchecks-${{ needs.check-tag.outputs.tag }}.cdx.json
+
+      - name: Upload verified distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist
-          path: dist/
+          path: ${{ runner.temp }}/dist1/
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom
+          path: ${{ runner.temp }}/sbom/
 
   release-assets:
-    name: Attach dist to GitHub Release
+    name: Attach verified release assets
     needs: [check-tag, reproducible-build]
     if: needs.check-tag.outputs.is_tag == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
-      - name: Download dist
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3  # v8.0.0
+      - name: Download distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: dist
           path: dist
-          merge-multiple: true
-      - name: Attach wheel and sdist to Release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b  # v2.5.0
+      - name: Download SBOM
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          tag_name: ${{ needs.check-tag.outputs.tag }}
-          files: |
-            dist/*.whl
-            dist/*.tar.gz
+          name: sbom
+          path: sbom
+      - name: Upload assets without replacing mismatched files
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          assets=(dist/*.whl dist/*.tar.gz sbom/*.cdx.json)
+          release_json=$(gh release view "$TAG" --repo "$GH_REPO" --json assets)
+          for asset in "${assets[@]}"; do
+            name="${asset##*/}"
+            remote_digest=$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | (.digest // "")' <<< "$release_json")
+            if [ -z "$remote_digest" ]; then
+              gh release upload "$TAG" "$asset" --repo "$GH_REPO"
+            else
+              local_digest="sha256:$(sha256sum "$asset" | cut -d ' ' -f 1)"
+              if [ "$remote_digest" != "$local_digest" ]; then
+                echo "Release asset $name already exists with a different digest." >&2
+                exit 1
+              fi
+            fi
+          done
 
-  # Python: publish only to PyPI. GitHub Packages does not support an official PyPI
-  # registry (see https://docs.github.com/en/packages/working-with-a-github-packages-registry).
   pypi:
     name: Publish to PyPI
-    needs: [check-tag, reproducible-build]
-    timeout-minutes: 5
+    needs: [check-tag, reproducible-build, release-assets]
     if: needs.check-tag.outputs.is_tag == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     environment:
       name: pypi
       url: https://pypi.org/p/fast-healthchecks
     permissions:
-      contents: read
       id-token: write
     steps:
-      - name: Download dist
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3  # v8.0.0
+      - name: Download distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: dist
           path: dist
-          merge-multiple: true
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # v1.13.0
+      - name: Publish with PyPI Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
 
   docs:
     name: Deploy documentation
-    needs: [check-tag]
+    needs: [check-tag, pypi]
     if: needs.check-tag.outputs.is_tag == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -159,35 +257,46 @@ jobs:
       id-token: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
-
+          persist-credentials: false
       - name: Configure Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b  # v5.0.0
-
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - name: Install uv
-        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7.3.1
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
+          version: "0.12.3"
+          python-version: "3.12"
           enable-cache: true
           cache-python: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Python
-        run: uv python install 3.14
-
-      - name: Install docs dependencies
-        run: uv sync --group=docs
-
       - name: Build documentation
-        run: uv run zensical build --clean
-
+        run: uv run --frozen --group docs zensical build --clean
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4.0.0
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e  # v4.0.5
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Deploy GitHub Pages
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
         id: deployment
+        with:
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [check-tag, release-assets, pypi, docs]
+    if: success() && needs.check-tag.outputs.is_tag == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the verified draft
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check-tag.outputs.tag }}
+        run: gh release edit "$TAG" --repo "$GH_REPO" --draft=false --latest

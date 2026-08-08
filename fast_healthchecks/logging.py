@@ -18,6 +18,7 @@ __all__ = (
     "NullLogger",
     "get_probe_logger",
     "get_stdlib_probe_logger",
+    "is_probe_logging_enabled",
     "set_probe_logger",
 )
 
@@ -47,6 +48,11 @@ _probe_logger: ProbeLoggerProtocol = NullLogger()
 def get_probe_logger() -> ProbeLoggerProtocol:
     """Return the current probe logger (default: NullLogger)."""
     return _probe_logger
+
+
+def is_probe_logging_enabled() -> bool:
+    """Return whether probe logging is configured with a non-null logger."""
+    return not isinstance(_probe_logger, NullLogger)
 
 
 def set_probe_logger(logger: ProbeLoggerProtocol) -> None:

@@ -1,6 +1,6 @@
 [project]
 name = "fast-healthchecks"
-version = "1.0.0"
+version = "1.1.0"
 description = "Fast Healthchecks"
 readme = "README.md"
 license = "MIT"
@@ -66,6 +66,7 @@ dev = [
     "ruff>=0.15.6",
     "rust-just>=1.46.0",
     "ty>=0.0.23",
+    "tomli>=2.4.1; python_version < '3.11'",
     "deptry>=0.24.0",
 ]
 docs = [
@@ -85,7 +86,8 @@ include = ["fast_healthchecks", "tests"]
 experimental_namespace_package = true
 
 [tool.deptry.per_rule_ignores]
-DEP004 = ["dotenv"]
+# dotenv is used by executable examples; tomli is used only by the Python 3.10 release script.
+DEP004 = ["dotenv", "tomli"]
 
 [tool.uv]
 default-groups = []
@@ -206,6 +208,7 @@ include = [
     "/docs",
     "/fast_healthchecks",
     "/pyproject.toml",
+    "/scripts",
     "/tests",
     "/zensical.toml",
 ]
