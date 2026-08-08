@@ -15,6 +15,11 @@ Checks that support `from_dsn()` accept these URL schemes:
 
 The asyncpg check forwards `disable`, `allow`, `prefer`, `require`, `verify-ca`, and `verify-full` to asyncpg when no certificate files are configured, preserving the driver's native SSL-mode behavior. `verify-full` validates the server certificate and hostname; it does not require a client certificate.
 
+Raw asyncpg/libpq URLs select the mode with `sslmode=require`. SQLAlchemy asyncpg URLs commonly
+use `postgresql+asyncpg://...?...&ssl=require`; the asyncpg check accepts that `ssl` spelling as a
+compatibility alias. When both `ssl` and `sslmode` are present they must be identical, otherwise DSN
+validation fails closed.
+
 `sslrootcert` configures the CA used to verify the server. `sslcert` and `sslkey` are optional client-authentication material and must form a usable certificate chain. A key without a certificate is rejected.
 
 ### Certificate rotation

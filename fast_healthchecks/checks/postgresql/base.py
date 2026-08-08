@@ -5,7 +5,7 @@ from __future__ import annotations
 import ssl
 from abc import abstractmethod
 from functools import lru_cache
-from typing import Generic, cast
+from typing import ClassVar, Generic, cast
 from urllib.parse import SplitResult, unquote, urlsplit
 
 from fast_healthchecks.checks._base import DEFAULT_HC_TIMEOUT, HealthCheckDSN, T_co
@@ -74,6 +74,8 @@ def create_ssl_context(
 class BasePostgreSQLHealthCheck(HealthCheckDSN[T_co, PostgresParseDsnResult], Generic[T_co]):
     """Base class for PostgreSQL health checks."""
 
+    _sslmode_query_keys: ClassVar[tuple[str, ...]] = ("sslmode",)
+
     @classmethod
     def _allowed_schemes(cls) -> tuple[str, ...]:
         return ("postgresql", "postgres")
@@ -128,7 +130,13 @@ class BasePostgreSQLHealthCheck(HealthCheckDSN[T_co, PostgresParseDsnResult], Ge
         """
         parse_result: SplitResult = urlsplit(dsn)
         query = parse_query_string(parse_result.query)
-        sslmode: SslMode = cls.validate_sslmode(query.get("sslmode", "disable"))
+        sslmodes = {key: cls.validate_sslmode(query[key]) for key in cls._sslmode_query_keys if key in query}
+        if len(set(sslmodes.values())) > 1:
+            aliases = " and ".join(sorted(sslmodes))
+            msg = f"Conflicting PostgreSQL TLS modes in {aliases}"
+            raise ValueError(msg) from None
+        default_sslmode: SslMode = "disable"
+        sslmode: SslMode = next(iter(sslmodes.values()), default_sslmode)
         sslcert_raw: str | None = query.get("sslcert")
         sslkey_raw: str | None = query.get("sslkey")
         sslrootcert_raw: str | None = query.get("sslrootcert")

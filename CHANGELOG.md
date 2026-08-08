@@ -1,3 +1,9 @@
+## 1.1.1 (2026-08-08)
+
+### Fixes
+
+- **postgresql**: honor SQLAlchemy asyncpg `ssl` DSN options, while rejecting conflicting `ssl` and `sslmode` values
+
 ## 1.1.0 (2026-08-08)
 
 ### Features

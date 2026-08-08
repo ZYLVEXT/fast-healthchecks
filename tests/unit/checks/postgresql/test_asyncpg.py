@@ -723,6 +723,65 @@ def test_from_dsn(
         assert_check_init(lambda: PostgreSQLAsyncPGHealthCheck.from_dsn(*args, **kwargs), expected, exception)
 
 
+@pytest.mark.parametrize("sslmode", ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"])
+def test_from_dsn_accepts_sqlalchemy_asyncpg_ssl_alias(sslmode: str) -> None:
+    """The SQLAlchemy asyncpg dialect uses ``ssl`` where raw asyncpg URLs use ``sslmode``."""
+    assert_check_init(
+        lambda: PostgreSQLAsyncPGHealthCheck.from_dsn(
+            f"postgresql+asyncpg://postgres:pass@localhost:5432/db?ssl={sslmode}",
+        ),
+        {
+            "host": "localhost",
+            "port": 5432,
+            "user": "postgres",
+            "password": "pass",
+            "database": "db",
+            "ssl": sslmode,
+            "direct_tls": False,
+            "timeout": 5.0,
+            "name": "PostgreSQL",
+        },
+        None,
+    )
+
+
+def test_from_dsn_accepts_matching_ssl_aliases() -> None:
+    """Equivalent SQLAlchemy and libpq options remain unambiguous."""
+    assert_check_init(
+        lambda: PostgreSQLAsyncPGHealthCheck.from_dsn(
+            "postgresql+asyncpg://postgres:pass@localhost:5432/db?ssl=require&sslmode=require",
+        ),
+        {
+            "host": "localhost",
+            "port": 5432,
+            "user": "postgres",
+            "password": "pass",
+            "database": "db",
+            "ssl": "require",
+            "direct_tls": False,
+            "timeout": 5.0,
+            "name": "PostgreSQL",
+        },
+        None,
+    )
+
+
+def test_from_dsn_rejects_conflicting_ssl_aliases() -> None:
+    """Conflicting aliases fail closed instead of silently weakening TLS."""
+    with pytest.raises(ValueError, match="Conflicting PostgreSQL TLS modes"):
+        PostgreSQLAsyncPGHealthCheck.from_dsn(
+            "postgresql+asyncpg://postgres:pass@localhost:5432/db?ssl=require&sslmode=disable",
+        )
+
+
+def test_from_dsn_rejects_invalid_sqlalchemy_ssl_alias() -> None:
+    """The SQLAlchemy alias is constrained to asyncpg's documented modes."""
+    with pytest.raises(ValueError, match="Invalid sslmode: broken"):
+        PostgreSQLAsyncPGHealthCheck.from_dsn(
+            "postgresql+asyncpg://postgres:pass@localhost:5432/db?ssl=broken",
+        )
+
+
 @pytest.mark.asyncio
 async def test_asyncpg_connect_args_kwargs() -> None:
     """Constructor and SSL args are passed through to asyncpg connect."""

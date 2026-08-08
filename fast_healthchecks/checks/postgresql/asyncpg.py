@@ -63,6 +63,7 @@ class PostgreSQLAsyncPGHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
 
     _config: PostgresAsyncPGConfig
     _name: str
+    _sslmode_query_keys = ("sslmode", "ssl")
 
     def __init__(
         self,
