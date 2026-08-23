@@ -23,7 +23,7 @@ class ProbeAsgiResponse(NamedTuple):
     healthy: bool
 
 
-async def map_report_to_asgi_http_response(  # ruff: ignore[too-many-arguments]
+async def map_report_to_asgi_http_response(  # ruff: ignore[too-many-arguments] - explicit options; bundling them would hide the surface
     report: HealthCheckReport,
     *,
     debug: bool,

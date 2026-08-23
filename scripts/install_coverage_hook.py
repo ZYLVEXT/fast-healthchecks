@@ -12,7 +12,7 @@ def main() -> None:
     """Write an optional coverage startup hook to the active site-packages."""
     hook_path = Path(sysconfig.get_paths()["purelib"]) / "coverage_subprocess.pth"
     hook_path.write_text(HOOK)
-    print(f"Installed coverage subprocess hook at {hook_path}")  # ruff: ignore[print]
+    print(f"Installed coverage subprocess hook at {hook_path}")  # ruff: ignore[print] - this is a repository script, not library output
 
 
 if __name__ == "__main__":

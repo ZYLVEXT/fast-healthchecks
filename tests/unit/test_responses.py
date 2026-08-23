@@ -19,7 +19,7 @@ class _StatusCode(IntEnum):
 pytestmark = pytest.mark.unit
 
 
-async def _handler_that_returns_none(_response: ProbeAsgiResponse) -> dict | None:  # ruff: ignore[unused-async]
+async def _handler_that_returns_none(_response: ProbeAsgiResponse) -> dict | None:  # ruff: ignore[unused-async] - the async signature is part of the handler protocol
     """Handler that returns None to trigger no-content response.
 
     Returns:

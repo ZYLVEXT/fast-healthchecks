@@ -85,7 +85,7 @@ class RedisHealthCheck(ClientCachingMixin["Redis"], HealthCheckDSN[HealthCheckRe
         config: RedisConfig | None = None,
         name: str = "Redis",
         close_client_fn: Callable[[Redis], Awaitable[None]] = _close_redis_client,
-        **kwargs: Any,  # ruff: ignore[any-type]
+        **kwargs: Any,  # ruff: ignore[any-type] - the value is forwarded to a client library untouched
     ) -> None:
         """Initialize the RedisHealthCheck class.
 

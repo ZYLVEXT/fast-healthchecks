@@ -89,7 +89,7 @@ class RabbitMQHealthCheck(
         config: RabbitMQConfig | None = None,
         name: str = "RabbitMQ",
         close_client_fn: Callable[[AbstractRobustConnection], Awaitable[None]] = _close_rabbitmq_client,
-        **kwargs: Any,  # ruff: ignore[any-type]
+        **kwargs: Any,  # ruff: ignore[any-type] - the value is forwarded to a client library untouched
     ) -> None:
         """Initialize the RabbitMQHealthCheck.
 

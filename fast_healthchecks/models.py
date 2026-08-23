@@ -91,7 +91,7 @@ class HealthCheckResult:
     def __init__(
         self,
         name: str,
-        healthy: bool,  # ruff: ignore[boolean-type-hint-positional-argument]
+        healthy: bool,  # ruff: ignore[boolean-type-hint-positional-argument] - public keyword flag kept for API compatibility
         error: HealthError | None = None,
         *,
         error_details: str | None = None,
