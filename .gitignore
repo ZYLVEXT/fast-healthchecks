@@ -178,3 +178,8 @@ report.xml
 .copier-answers.yml
 .gitlab-ci.yml
 .env
+
+# Maintainer VVAH / agentic SAST artifacts (never publish)
+security-scan/
+security-remediation/
+run_manifest.json
