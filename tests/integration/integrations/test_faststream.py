@@ -2,11 +2,16 @@
 
 import asyncio
 import json
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from http import HTTPStatus
+from typing import TYPE_CHECKING, cast
 
+import httpx
 import pytest
+from faststream import TestApp
 from faststream.asgi import AsgiFastStream
-from starlette.testclient import TestClient
+from faststream.kafka import TestKafkaBroker
 
 from examples.faststream_example.main import app_custom, app_fail, app_integration
 from examples.faststream_example.main import broker as example_broker
@@ -16,39 +21,61 @@ from fast_healthchecks.integrations.base import Probe, build_probe_route_options
 from fast_healthchecks.integrations.faststream import health
 from fast_healthchecks.models import HealthCheckResult
 
-pytestmark = pytest.mark.integration
+if TYPE_CHECKING:
+    from faststream.kafka import KafkaBroker
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
-def test_liveness_probe() -> None:
+@asynccontextmanager
+async def _faststream_client(app: AsgiFastStream) -> AsyncGenerator[httpx.AsyncClient, None]:
+    """Run the app and its test broker in the current event loop.
+
+    Yields:
+        httpx.AsyncClient: Client bound to the ASGI app.
+    """
+    kafka_broker = cast("KafkaBroker", app.broker)
+    async with (
+        TestKafkaBroker(kafka_broker, connect_only=True),
+        TestApp(app),
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+        ) as client,
+    ):
+        yield client
+
+
+async def test_liveness_probe() -> None:
     """Liveness probe returns success when checks pass."""
-    with TestClient(app_integration) as client:
-        response = client.get("/health/liveness")
+    async with _faststream_client(app_integration) as client:
+        response = await client.get("/health/liveness")
         assert response.status_code == HTTPStatus.NO_CONTENT
         assert response.content == b""
 
 
-def test_readiness_probe() -> None:
+async def test_readiness_probe() -> None:
     """Readiness probe returns success when all checks pass."""
-    with TestClient(app_integration) as client:
-        response = client.get("/health/readiness")
+    async with _faststream_client(app_integration) as client:
+        response = await client.get("/health/readiness")
         assert response.status_code == HTTPStatus.NO_CONTENT, (
             f"readiness returned {response.status_code}; body={response.text!r}"
         )
         assert response.content == b""
 
 
-def test_startup_probe() -> None:
+async def test_startup_probe() -> None:
     """Startup probe returns success when checks pass."""
-    with TestClient(app_integration) as client:
-        response = client.get("/health/startup")
+    async with _faststream_client(app_integration) as client:
+        response = await client.get("/health/startup")
         assert response.status_code == HTTPStatus.NO_CONTENT
         assert response.content == b""
 
 
-def test_readiness_probe_fail() -> None:
+async def test_readiness_probe_fail() -> None:
     """Readiness probe returns failure when a check fails."""
-    with TestClient(app_fail) as client:
-        response = client.get("/health/readiness")
+    async with _faststream_client(app_fail) as client:
+        response = await client.get("/health/readiness")
         assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
         data = response.json()
         # With debug=True the body is the full report (results, allow_partial_failure); otherwise minimal {"status": "unhealthy"}
@@ -57,10 +84,10 @@ def test_readiness_probe_fail() -> None:
         )
 
 
-def test_custom_handler() -> None:
+async def test_custom_handler() -> None:
     """Custom handler is used for probe response."""
-    with TestClient(app_custom) as client:
-        response = client.get("/custom_health/readiness")
+    async with _faststream_client(app_custom) as client:
+        response = await client.get("/custom_health/readiness")
     assert response.status_code == HTTPStatus.OK
     assert response.content == json.dumps(
         {"results": [{"name": "Async dummy", "healthy": True, "error": None}], "allow_partial_failure": False},
@@ -71,7 +98,7 @@ def test_custom_handler() -> None:
     ).encode("utf-8")
 
 
-def test_reporting_timeout_returns_failed_report_with_injected_runner() -> None:
+async def test_reporting_timeout_returns_failed_report_with_injected_runner() -> None:
     """Reporting mode timeout returns unhealthy HTTP response (no exception)."""
 
     async def _slow_check() -> HealthCheckResult:
@@ -89,14 +116,14 @@ def test_reporting_timeout_returns_failed_report_with_injected_runner() -> None:
         ),
     )
 
-    with TestClient(app) as client:
-        response = client.get("/health/readiness")
+    async with _faststream_client(app) as client:
+        response = await client.get("/health/readiness")
 
     assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
     assert response.json() == {"status": "unhealthy"}
 
 
-def test_strict_timeout_returns_http_500_with_injected_runner() -> None:
+async def test_strict_timeout_returns_http_500_with_injected_runner() -> None:
     """Strict mode timeout is surfaced as HTTP 500 in integration endpoint."""
 
     async def _slow_check() -> HealthCheckResult:
@@ -114,13 +141,13 @@ def test_strict_timeout_returns_http_500_with_injected_runner() -> None:
         ),
     )
 
-    with TestClient(app) as client:
-        response = client.get("/health/readiness")
+    async with _faststream_client(app) as client:
+        response = await client.get("/health/readiness")
 
     assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
 
 
-def test_debug_payload_contains_structured_error_object() -> None:
+async def test_debug_payload_contains_structured_error_object() -> None:
     """Debug failure response uses structured `error` payload."""
 
     async def _failing_check() -> bool:
@@ -138,8 +165,8 @@ def test_debug_payload_contains_structured_error_object() -> None:
         ),
     )
 
-    with TestClient(app) as client:
-        response = client.get("/health/readiness")
+    async with _faststream_client(app) as client:
+        response = await client.get("/health/readiness")
 
     assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
     data = response.json()
