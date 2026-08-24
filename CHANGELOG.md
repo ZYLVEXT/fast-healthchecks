@@ -1,3 +1,14 @@
+## 1.1.2 (2026-08-24)
+
+### Fixes
+
+- **dependencies**: support redis-py 8.x while retaining compatibility with 7.x
+
+### Build
+
+- **toolchain**: refresh GitHub Actions, uv, build, lint, typing, documentation, and locked development dependencies
+- **quality**: document retained Ruff suppressions and focus Codacy on production sources
+
 ## 1.1.1 (2026-08-08)
 
 ### Fixes

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
         HealthCheckTimeoutError,
     )
 
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 
 _EXPORTS = {
     "Check": ("fast_healthchecks.checks.types", "Check"),
