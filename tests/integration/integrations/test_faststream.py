@@ -5,13 +5,13 @@ import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from http import HTTPStatus
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import httpx
 import pytest
 from faststream import TestApp
 from faststream.asgi import AsgiFastStream
-from faststream.kafka import KafkaBroker, TestKafkaBroker
+from faststream.kafka import TestKafkaBroker
 
 from examples.faststream_example.main import app_custom, app_fail, app_integration
 from examples.faststream_example.main import broker as example_broker
@@ -20,6 +20,9 @@ from fast_healthchecks.execution import ProbeRunner, RunPolicy
 from fast_healthchecks.integrations.base import Probe, build_probe_route_options
 from fast_healthchecks.integrations.faststream import health
 from fast_healthchecks.models import HealthCheckResult
+
+if TYPE_CHECKING:
+    from faststream.kafka import KafkaBroker
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
