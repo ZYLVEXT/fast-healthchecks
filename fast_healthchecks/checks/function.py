@@ -48,7 +48,7 @@ class FunctionHealthCheck(ConfigDictMixin, HealthCheck[HealthCheckResult]):
         func: Callable[..., Any] | None = None,
         name: str = "Function",
         executor: Executor | None = None,
-        **kwargs: Any,  # ruff: ignore[any-type]
+        **kwargs: Any,  # ruff: ignore[any-type] - the value is forwarded to a client library untouched
     ) -> None:
         """Initialize the FunctionHealthCheck.
 

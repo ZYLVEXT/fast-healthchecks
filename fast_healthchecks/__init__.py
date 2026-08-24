@@ -1,6 +1,6 @@
 """Framework-neutral health checks with lazy public exports."""
 
-# ruff: file-ignore[non-empty-init-module]
+# ruff: file-ignore[non-empty-init-module] - the lazy export table lives here
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
         HealthCheckTimeoutError,
     )
 
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 
 _EXPORTS = {
     "Check": ("fast_healthchecks.checks.types", "Check"),
@@ -49,7 +49,7 @@ __all__ = (
 )
 
 
-def __getattr__(name: str) -> Any:  # ruff: ignore[any-type]
+def __getattr__(name: str) -> Any:  # ruff: ignore[any-type] - the value is forwarded to a client library untouched
     """Load a public symbol only when first accessed.
 
     Returns:

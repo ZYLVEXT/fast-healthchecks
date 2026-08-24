@@ -7,7 +7,7 @@ import hashlib
 import os
 import re
 import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import]
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - runs a fixed argv, never a shell string
 import sys
 import tarfile
 import tempfile
@@ -160,7 +160,7 @@ def build(dist_dir: Path) -> None:
     """Build one wheel and one sdist from locked public sources."""
     version()
     _clear_artifacts(dist_dir)
-    subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+    subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - runs a fixed argv, never a shell string
         (_uv_executable(), "build", "--no-sources", "--out-dir", str(dist_dir)),
         cwd=_REPOSITORY_ROOT,
         check=True,
@@ -188,13 +188,13 @@ def smoke(dist_dir: Path) -> None:
     wheel, _source_distribution = _artifacts(dist_dir)
     with tempfile.TemporaryDirectory(prefix="fast-healthchecks-release-smoke-") as temporary_directory:
         environment = Path(temporary_directory) / "venv"
-        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - runs a fixed argv, never a shell string
             (_uv_executable(), "venv", str(environment), "--python", sys.executable),
             cwd=_REPOSITORY_ROOT,
             check=True,
         )
         python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - runs a fixed argv, never a shell string
             (_uv_executable(), "pip", "install", "--python", str(python), str(wheel)),
             cwd=_REPOSITORY_ROOT,
             check=True,
@@ -204,7 +204,7 @@ def smoke(dist_dir: Path) -> None:
             f"assert {_MODULE}.__version__ == {release_version!r}; "
             f"assert importlib.resources.files('{_MODULE}').joinpath('py.typed').is_file()"
         )
-        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - runs a fixed argv, never a shell string
             (str(python), "-I", "-c", check),
             cwd=temporary_directory,
             check=True,

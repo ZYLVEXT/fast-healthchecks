@@ -6,7 +6,7 @@ and centralize serialization for to_dict().
 
 from __future__ import annotations
 
-import ssl as _ssl  # ruff: ignore[typing-only-standard-library-import]
+import ssl as _ssl  # ruff: ignore[typing-only-standard-library-import] - resolved at runtime by the framework
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
@@ -126,7 +126,7 @@ class RabbitMQConfig:
     host: str = "localhost"
     port: int = 5672
     user: str = "guest"
-    password: str = "guest"  # ruff: ignore[hardcoded-password-string]
+    password: str = "guest"  # ruff: ignore[hardcoded-password-string] - kept deliberately
     vhost: str = "/"
     secure: bool = False
     timeout: float = DEFAULT_HC_TIMEOUT

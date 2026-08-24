@@ -70,7 +70,7 @@ class PostgreSQLAsyncPGHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
         *,
         config: PostgresAsyncPGConfig | None = None,
         name: str = "PostgreSQL",
-        **kwargs: Any,  # ruff: ignore[any-type]
+        **kwargs: Any,  # ruff: ignore[any-type] - the value is forwarded to a client library untouched
     ) -> None:
         """Initialize the PostgreSQLAsyncPGHealthCheck.
 
@@ -87,7 +87,7 @@ class PostgreSQLAsyncPGHealthCheck(BasePostgreSQLHealthCheck[HealthCheckResult])
     @classmethod
     def _from_parsed_dsn(
         cls,
-        parsed: "PostgresParseDsnResult",  # ruff: ignore[quoted-annotation]
+        parsed: PostgresParseDsnResult,
         *,
         name: str = "PostgreSQL",
         timeout: float = DEFAULT_HC_TIMEOUT,

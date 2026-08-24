@@ -1,6 +1,6 @@
 """Health-check protocols and configuration contracts with lazy exports."""
 
-# ruff: file-ignore[non-empty-init-module]
+# ruff: file-ignore[non-empty-init-module] - the lazy export table lives here
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ __all__ = (
 )
 
 
-def __getattr__(name: str) -> Any:  # ruff: ignore[any-type]
+def __getattr__(name: str) -> Any:  # ruff: ignore[any-type] - the value is forwarded to a client library untouched
     """Load a configuration or protocol only when first accessed.
 
     Returns:

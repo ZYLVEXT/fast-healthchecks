@@ -86,10 +86,10 @@ async def _run_check_safe(check: Check, index: int) -> HealthCheckResult:
                 index=index,
                 healthy=result.healthy,
             )
-        return result  # ruff: ignore[try-consider-else]
+        return result  # ruff: ignore[try-consider-else] - the success path stays next to the call it describes
     except (asyncio.CancelledError, SystemExit, KeyboardInterrupt):
         raise
-    except Exception as exc:  # ruff: ignore[blind-except]
+    except Exception as exc:  # ruff: ignore[blind-except] - any failure becomes a structured result
         result = result_on_error(name, exc)
         if logger is not None:
             logger.log(logging.DEBUG, "check_end", check_name=name, index=index, healthy=False)
@@ -137,7 +137,7 @@ async def _run_sequential(
     return results
 
 
-async def run_probe(  # ruff: ignore[too-many-arguments]
+async def run_probe(  # ruff: ignore[too-many-arguments] - explicit options; bundling them would hide the surface
     probe: Probe,
     *,
     timeout: float | None = None,
@@ -248,7 +248,7 @@ class ProbeRunner:
     _resource_checks: list[object] = field(default_factory=list, init=False, repr=False, compare=False)
     _resource_check_ids: set[int] = field(default_factory=set, init=False, repr=False, compare=False)
 
-    async def __aenter__(self) -> ProbeRunner:  # ruff: ignore[non-self-return-type]
+    async def __aenter__(self) -> ProbeRunner:  # ruff: ignore[non-self-return-type] - returns the concrete subclass by design
         """Return self for async context-manager usage."""
         return self
 

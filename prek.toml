@@ -159,7 +159,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
-rev = "8d582f54b8e4cc5a61a85eeed1f54bbdb1e294fc" # frozen: 0.12.3
+rev = "b84c4a0a90bd58c7d82ae8f0d4d5e77b1ddd3ce6" # frozen: 0.12.5
 hooks = [
   { id = "uv-lock" }
 ]

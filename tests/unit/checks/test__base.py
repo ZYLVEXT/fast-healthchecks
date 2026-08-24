@@ -5,7 +5,10 @@ from typing import cast
 
 import pytest
 
-from fast_healthchecks.checks._base import healthcheck_safe, result_on_error  # ruff: ignore[import-private-name]
+from fast_healthchecks.checks._base import (  # ruff: ignore[import-private-name] - the test asserts on internal behaviour
+    healthcheck_safe,
+    result_on_error,
+)
 from fast_healthchecks.checks.kafka import KafkaHealthCheck
 from fast_healthchecks.checks.mongo import MongoHealthCheck
 from fast_healthchecks.checks.opensearch import OpenSearchHealthCheck
@@ -223,7 +226,7 @@ def test_result_on_error_without_exception() -> None:
     """result_on_error captures current exception when exc is None."""
 
     def _raise_error() -> None:
-        raise ValueError("captured error")  # ruff: ignore[raise-vanilla-args, raw-string-in-exception]
+        raise ValueError("captured error")  # ruff: ignore[raise-vanilla-args, raw-string-in-exception] - the message is specific to this test
 
     result = HealthCheckResult(name="", healthy=True)
     try:
