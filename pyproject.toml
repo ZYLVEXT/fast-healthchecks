@@ -68,6 +68,7 @@ dev = [
     "ty>=0.0.69",
     "tomli>=2.4.1; python_version < '3.11'",
     "deptry>=0.25.1",
+    "import-linter>=2.13",
 ]
 docs = [
     "mkdocstrings[python]>=1.0.6",
@@ -90,6 +91,15 @@ experimental_namespace_package = true
 DEP004 = ["dotenv", "tomli", "yaml"]
 # tomllib is part of the standard library on Python 3.11+ and has a guarded tomli fallback on 3.10.
 DEP001 = ["tomllib"]
+
+[tool.importlinter]
+root_package = "fast_healthchecks"
+
+[[tool.importlinter.contracts]]
+name = "checks and execution must not import integrations"
+type = "forbidden"
+source_modules = ["fast_healthchecks.checks", "fast_healthchecks.execution"]
+forbidden_modules = ["fast_healthchecks.integrations"]
 
 [tool.uv]
 default-groups = []

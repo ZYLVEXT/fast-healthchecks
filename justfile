@@ -41,6 +41,10 @@ lint:
 pin-check:
     uv run --no-sync python scripts/validate_dependency_pins.py
 
+# Forbid checks and execution from importing integrations.
+lint-imports:
+    uv run --no-sync lint-imports
+
 # ------------------------------------------------------------------------------
 # Tests
 # ------------------------------------------------------------------------------
