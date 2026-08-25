@@ -123,7 +123,7 @@ On release (tag), the workflow runs a **reproducible-build** job: two builds in 
 
 ### Prek
 
-Prek runs the same checks as CI. The hook `no-commit-to-branch` is skipped on CI via `SKIP`. Prek is executed with `uv run --no-sync prek run ...` and is locked in the dev dependency group.
+Prek runs the same checks as CI. The hook `no-commit-to-branch` is skipped on CI via `SKIP`. Prek is executed with `uv run --no-sync prek run ...` and is locked in the dev dependency group. Import boundaries (`checks` and `execution` must not import `integrations`) are checked by import-linter in the same hook run.
 
 When updating uv, update the uv-pre-commit revision in `prek.toml` to match: use the [uv-pre-commit releases](https://github.com/astral-sh/uv-pre-commit/releases) and set `rev` to the commit SHA that corresponds to the uv version (keep the `# frozen: <version>` comment for readability).
 

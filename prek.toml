@@ -61,6 +61,13 @@ hooks = [
     pass_filenames = false
   },
   {
+    id = "import-linter",
+    name = "import-linter",
+    entry = "uv run --no-sync lint-imports",
+    language = "system",
+    pass_filenames = false
+  },
+  {
     id = "dependency-pins",
     name = "Dependency pins",
     entry = "uv run --no-sync python scripts/validate_dependency_pins.py",
