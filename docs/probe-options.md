@@ -21,6 +21,10 @@ To customize HTTP responses, pass `options=build_probe_route_options(...)` to `H
 
 Example: `HealthcheckRouter(Probe(...), options=build_probe_route_options(debug=True, prefix="/health"))`.
 
+### Debug mode
+
+With `debug=True`, unhealthy responses bypass the failure handler by design and dump the full report, including each `error.message` (`"<ExceptionType>: <message>"`). Error metadata is redacted by key, but messages are free text and may name internal hosts or dependency details. Keep `debug=False` (the default) on endpoints reachable from outside the deployment; enable it only for internal diagnostics.
+
 ## RunPolicy Options
 
 When using [`ProbeRunner`][ProbeRunner] directly, you can customize execution behavior with `RunPolicy`:

@@ -14,7 +14,18 @@ _SECRET_KEYS = frozenset(
         "username",
     },
 )
-_SECRET_KEY_FRAGMENTS = ("password", "secret", "token", "api_key", "credential")
+_SECRET_KEY_FRAGMENTS = (
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "api_key",
+    "credential",
+    "authorization",
+    "bearer",
+    "cookie",
+    "private_key",
+)
 
 
 def _is_secret_key(key: str) -> bool:

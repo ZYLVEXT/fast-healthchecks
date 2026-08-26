@@ -6,7 +6,7 @@ Health check URLs must come from trusted configuration only. Do not use user-con
 
 ## RabbitMQ default credentials
 
-The RabbitMQ health check (and ``RabbitMQConfig``) default to ``user="guest"`` and ``password="guest"`` when not specified (e.g. when parsing a DSN without credentials). **Do not use these defaults in production or on any non-local broker.** They are intended for local development only. In production, set explicit credentials (e.g. from environment or a secrets manager) or use a DSN that includes the credentials.
+The RabbitMQ health check (and ``RabbitMQConfig``) default to ``user="guest"`` and ``password="guest"`` when not specified (e.g. when parsing a DSN without credentials). These defaults are accepted **only for loopback hosts** (`localhost`, `127.0.0.1`, `::1`); configuring them for any other host raises ``ValueError``. In production, set explicit credentials (e.g. from environment or a secrets manager) or use a DSN that includes the credentials.
 
 ## Automatic secret redaction
 
@@ -14,13 +14,16 @@ When health checks fail and return a `HealthError` exception, the library automa
 
 The redaction mechanism filters keys matching these patterns (case-insensitive):
 
-- ``*password*``
+- ``*password*`` / ``*passwd*``
 - ``*secret*``
 - ``*token*``
 - ``*api_key*``
 - ``*credential*``
+- ``*authorization*`` / ``*bearer*``
+- ``*cookie*``
+- ``*private_key*``
 
-For example, if a health check fails with metadata like:
+Exact key names such as ``user``, ``username``, ``http_auth``, and ``sasl_plain_username`` are also redacted. For example, if a health check fails with metadata like:
 
 ```python
 {"host": "db.example.com", "password": "secret123", "user": "admin"}
@@ -29,8 +32,10 @@ For example, if a health check fails with metadata like:
 The redacted output will be:
 
 ```python
-{"host": "db.example.com", "password": "***", "user": "admin"}
+{"host": "db.example.com", "password": "***", "user": "***"}
 ```
+
+Redaction matches dictionary keys, not free-text values: secrets embedded in arbitrary strings (e.g. a DSN pasted into a message) are not detected. Keep credentials out of check names and custom messages.
 
 This works recursively for nested dictionaries. The redaction is applied automatically when:
 

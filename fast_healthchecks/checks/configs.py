@@ -81,7 +81,11 @@ class KafkaConfig:
 
 @dataclass(frozen=True)
 class MongoConfig:
-    """Configuration for MongoDB health check."""
+    """Configuration for MongoDB health check.
+
+    ``tls=None`` leaves the driver default untouched; ``tls_ca_file`` is
+    forwarded as ``tlsCAFile`` when set.
+    """
 
     hosts: str | list[str] = "localhost"
     port: int | None = 27017
@@ -89,6 +93,8 @@ class MongoConfig:
     password: str | None = None
     database: str | None = None
     auth_source: str = "admin"
+    tls: bool | None = None
+    tls_ca_file: str | None = None
     timeout: float = DEFAULT_HC_TIMEOUT
 
     def to_dict(self) -> dict[str, Any]:
@@ -98,12 +104,17 @@ class MongoConfig:
 
 @dataclass(frozen=True)
 class OpenSearchConfig:
-    """Configuration for OpenSearch health check."""
+    """Configuration for OpenSearch health check.
+
+    ``verify_certs`` defaults to ``True``: TLS connections verify the server
+    certificate unless explicitly disabled. It only applies when
+    ``use_ssl=True``.
+    """
 
     hosts: list[str] = field(default_factory=lambda: ["localhost:9200"])
     http_auth: tuple[str, str] | None = None
     use_ssl: bool = False
-    verify_certs: bool = False
+    verify_certs: bool = True
     ssl_show_warn: bool = False
     ca_certs: str | None = None
     timeout: float = DEFAULT_HC_TIMEOUT
@@ -113,14 +124,18 @@ class OpenSearchConfig:
         return asdict(self)
 
 
+_LOOPBACK_HOSTS: frozenset[str] = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
 @dataclass(frozen=True)
 class RabbitMQConfig:
     """Configuration for RabbitMQ health check.
 
     **Security:** The default ``user`` and ``password`` (``"guest"``) match
-    RabbitMQ's default credentials and are intended for local development only.
-    Do not use these defaults in production or on non-local brokers; set
-    explicit credentials or use a secrets manager. See SECURITY.md.
+    RabbitMQ's default credentials and are accepted only for loopback hosts
+    (``localhost``, ``127.0.0.1``, ``::1``). Configuring them for any other
+    host raises ``ValueError``; set explicit credentials or use a secrets
+    manager. See SECURITY.md.
     """
 
     host: str = "localhost"
@@ -130,6 +145,20 @@ class RabbitMQConfig:
     vhost: str = "/"
     secure: bool = False
     timeout: float = DEFAULT_HC_TIMEOUT
+
+    def __post_init__(self) -> None:
+        """Reject RabbitMQ default credentials for non-loopback brokers.
+
+        Raises:
+            ValueError: If both ``user`` and ``password`` are ``"guest"`` and
+                ``host`` is not a loopback address.
+        """
+        if self.user == "guest" and self.password == "guest" and self.host not in _LOOPBACK_HOSTS:
+            msg = (
+                f"RabbitMQ default credentials 'guest'/'guest' are only valid for loopback hosts, "
+                f"got host {self.host!r}; set explicit credentials"
+            )
+            raise ValueError(msg)
 
     def to_dict(self) -> dict[str, Any]:
         """Return config as a dict for serialization."""

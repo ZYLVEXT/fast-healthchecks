@@ -124,6 +124,10 @@ class OpenSearchHealthCheck(
         Args:
             dsn: The DSN to parse.
 
+        An ``https`` scheme enables TLS with certificate verification
+        (``verify_certs=True``); pass ``verify_certs=False`` to ``from_dsn``
+        to explicitly opt out.
+
         Returns:
             OpenSearchParseDsnResult: The results of parsing the DSN.
 
@@ -139,11 +143,13 @@ class OpenSearchHealthCheck(
         if parsed.username is not None:
             http_auth = (unquote(parsed.username), unquote(parsed.password or ""))
 
-        port = parsed.port or (443 if parsed.scheme == "https" else 9200)
+        use_ssl = parsed.scheme == "https"
+        port = parsed.port or (443 if use_ssl else 9200)
         return {
             "hosts": [f"{parsed.hostname}:{port}"],
             "http_auth": http_auth,
-            "use_ssl": parsed.scheme == "https",
+            "use_ssl": use_ssl,
+            "verify_certs": use_ssl,
         }
 
     @classmethod
@@ -159,7 +165,7 @@ class OpenSearchHealthCheck(
             hosts=parsed["hosts"],
             http_auth=parsed["http_auth"],
             use_ssl=parsed["use_ssl"],
-            verify_certs=cast("bool", kwargs.get("verify_certs", False)),
+            verify_certs=cast("bool", kwargs.get("verify_certs", parsed["verify_certs"])),
             ssl_show_warn=cast("bool", kwargs.get("ssl_show_warn", False)),
             ca_certs=cast("str | None", kwargs.get("ca_certs")),
             timeout=timeout,

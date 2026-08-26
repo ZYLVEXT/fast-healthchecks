@@ -16,6 +16,18 @@ def test_map_exception_to_health_error_unknown_exception_code() -> None:
     assert "RuntimeError" in error.message
 
 
+def test_message_has_no_traceback_even_when_traceback_present() -> None:
+    """A raised exception maps to '<Type>: <message>' without traceback frames."""
+    try:
+        msg = "boom"
+        raise RuntimeError(msg)  # noqa: TRY301
+    except RuntimeError as exc:
+        error = map_exception_to_health_error(exc)
+    assert error.message == "RuntimeError: boom"
+    assert "Traceback" not in error.message
+    assert "File" not in error.message
+
+
 def test_map_exception_to_health_error_timeout_code() -> None:
     """Timeout exceptions are mapped to CHECK_TIMEOUT by default."""
     error = map_exception_to_health_error(asyncio.TimeoutError("timed out"))

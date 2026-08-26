@@ -3,10 +3,11 @@
 Classes:
     RabbitMQHealthCheck: A class to perform health checks on RabbitMQ.
 
-**Security:** When using DSN or config without a password (or with default
-credentials), the library falls back to ``user="guest"`` and ``password="guest"``.
-These defaults are for local development only; do not use them in production or
-on non-local brokers. See SECURITY.md and :class:`RabbitMQConfig` docstring.
+**Security:** When using DSN or config without credentials, the library falls
+back to ``user="guest"`` and ``password="guest"``. This fallback is accepted
+only for loopback hosts; ``RabbitMQConfig`` raises ``ValueError`` when the
+default credentials target any other host. See SECURITY.md and
+:class:`RabbitMQConfig` docstring.
 
 Usage:
     The RabbitMQHealthCheck class can be used to perform health checks on RabbitMQ by calling it.
@@ -148,7 +149,7 @@ class RabbitMQHealthCheck(
         **_kwargs: object,
     ) -> RabbitMQHealthCheck:
         parse_result = parsed["parse_result"]
-        # Default "guest"/"guest" is development-only; see SECURITY.md and RabbitMQConfig.
+        # Default "guest"/"guest" is loopback-only; RabbitMQConfig rejects it for remote hosts.
         config = RabbitMQConfig(
             host=parse_result.hostname or "localhost",
             user=parse_result.username or "guest",

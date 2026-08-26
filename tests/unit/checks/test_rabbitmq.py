@@ -1,5 +1,6 @@
 """Unit tests for RabbitMQHealthCheck."""
 
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -305,6 +306,27 @@ def test_from_dsn(
 ) -> None:
     """Test from_dsn with various DSN options."""
     assert_check_init(lambda: RabbitMQHealthCheck.from_dsn(*args, **kwargs), expected, exception)
+
+
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "::1"])
+def test_guest_credentials_allowed_on_loopback(host: str) -> None:
+    """Default guest credentials are accepted for loopback hosts."""
+    check = RabbitMQHealthCheck(host=host)
+    assert check._config.user == "guest"
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: RabbitMQHealthCheck(host="broker.example"),
+        lambda: RabbitMQHealthCheck.from_dsn("amqp://broker.example/"),
+        lambda: RabbitMQHealthCheck.from_dsn("amqp://guest:guest@broker.example/"),
+    ],
+)
+def test_guest_credentials_rejected_on_remote_host(factory: Callable[[], RabbitMQHealthCheck]) -> None:
+    """Default guest credentials targeting a non-loopback host raise ValueError."""
+    with pytest.raises(ValueError, match="only valid for loopback hosts"):
+        factory()
 
 
 @pytest.mark.asyncio

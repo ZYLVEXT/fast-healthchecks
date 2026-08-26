@@ -85,6 +85,7 @@ async def _run_check_safe(check: Check, index: int) -> HealthCheckResult:
                 check_name=result.name,
                 index=index,
                 healthy=result.healthy,
+                error=result.error_details,
             )
         return result  # ruff: ignore[try-consider-else] - the success path stays next to the call it describes
     except (asyncio.CancelledError, SystemExit, KeyboardInterrupt):
@@ -92,7 +93,14 @@ async def _run_check_safe(check: Check, index: int) -> HealthCheckResult:
     except Exception as exc:  # ruff: ignore[blind-except] - any failure becomes a structured result
         result = result_on_error(name, exc)
         if logger is not None:
-            logger.log(logging.DEBUG, "check_end", check_name=name, index=index, healthy=False)
+            logger.log(
+                logging.DEBUG,
+                "check_end",
+                check_name=name,
+                index=index,
+                healthy=False,
+                error=result.error_details,
+            )
         return result
 
 

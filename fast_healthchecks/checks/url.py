@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, final
+from urllib.parse import urlsplit
 
 from fast_healthchecks.checks._base import (
     _CLIENT_CACHING_SLOTS,
@@ -83,6 +84,11 @@ class UrlHealthCheck(ClientCachingMixin["AsyncClient"], ConfigDictMixin, HealthC
             name: The name of the health check.
             close_client_fn: Callable to close the cached client.
             **kwargs: Passed to UrlConfig when config is None (url required).
+
+        Raises:
+            ValueError: If the URL is ``https``, ``username`` is set, and
+                ``verify_ssl`` is False. Disabling certificate verification
+                would let an interceptor read the basic-auth credentials.
         """
         if config is None:
             kwargs = dict(kwargs)
@@ -90,6 +96,9 @@ class UrlHealthCheck(ClientCachingMixin["AsyncClient"], ConfigDictMixin, HealthC
                 kwargs["url"] = str(kwargs["url"])
             config = UrlConfig(**kwargs)
         validate_url_ssrf(config.url, block_private_hosts=config.block_private_hosts)
+        if config.username and not config.verify_ssl and urlsplit(config.url).scheme.lower() == "https":
+            msg = "Basic auth over https requires verify_ssl=True; disabling verification exposes the credentials"
+            raise ValueError(msg)
         self._config = config
         self._name = name
         super().__init__(close_client_fn=close_client_fn)
