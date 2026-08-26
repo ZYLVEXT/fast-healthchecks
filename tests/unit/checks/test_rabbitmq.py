@@ -11,6 +11,9 @@ from tests.utils import assert_check_init
 
 pytestmark = pytest.mark.unit
 
+EXPECTED_CHANNEL_OPENS_AFTER_TWO_CALLS = 2
+EXPECTED_CONNECTS_AFTER_RECONNECT = 2
+
 
 @pytest.mark.parametrize(
     ("params", "expected", "exception"),
@@ -306,6 +309,61 @@ def test_from_dsn(
 ) -> None:
     """Test from_dsn with various DSN options."""
     assert_check_init(lambda: RabbitMQHealthCheck.from_dsn(*args, **kwargs), expected, exception)
+
+
+def _make_open_connection() -> AsyncMock:
+    """Build a mock robust connection that reports open and yields channels.
+
+    Returns:
+        AsyncMock: Connection mock with is_closed=False and a channel factory.
+    """
+    client = AsyncMock()
+    client.is_closed = False
+    client.channel = AsyncMock(return_value=AsyncMock())
+    return client
+
+
+@pytest.mark.asyncio
+async def test_call_opens_channel_and_reuses_open_connection() -> None:
+    """Each check opens a channel; an open cached connection is reused."""
+    health_check = RabbitMQHealthCheck(host="localhost")
+    client = _make_open_connection()
+    with patch("aio_pika.connect_robust", new_callable=AsyncMock, return_value=client) as mock_connect:
+        result1 = await health_check()
+        result2 = await health_check()
+    assert result1.healthy is True
+    assert result2.healthy is True
+    assert mock_connect.await_count == 1
+    assert client.channel.await_count == EXPECTED_CHANNEL_OPENS_AFTER_TWO_CALLS
+    client.channel.return_value.close.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_closed_cached_connection_is_recreated() -> None:
+    """A cached connection reporting is_closed is closed and replaced."""
+    health_check = RabbitMQHealthCheck(host="localhost")
+    first = _make_open_connection()
+    second = _make_open_connection()
+    with patch("aio_pika.connect_robust", new_callable=AsyncMock, side_effect=[first, second]) as mock_connect:
+        await health_check()
+        first.is_closed = True
+        result = await health_check()
+    assert result.healthy is True
+    assert mock_connect.await_count == EXPECTED_CONNECTS_AFTER_RECONNECT
+    first.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_call_unhealthy_when_channel_open_fails() -> None:
+    """A connection that cannot open a channel yields an unhealthy result."""
+    health_check = RabbitMQHealthCheck(host="localhost")
+    client = _make_open_connection()
+    client.channel = AsyncMock(side_effect=ConnectionError("broker gone"))
+    with patch("aio_pika.connect_robust", new_callable=AsyncMock, return_value=client):
+        result = await health_check()
+    assert result.healthy is False
+    assert result.error is not None
+    assert "broker gone" in result.error.message
 
 
 @pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "::1"])

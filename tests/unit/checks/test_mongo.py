@@ -459,7 +459,7 @@ async def test_AsyncIOMotorClient_args_kwargs() -> None:
         ("mongodb://localhost:27017/?ssl=true&ssl_ca_certs=/etc/ssl/ca.pem", True, "/etc/ssl/ca.pem"),
     ],
 )
-def test_parse_dsn_tls(dsn: str, expected_tls: bool | None, expected_ca: str | None) -> None:
+def test_parse_dsn_tls(dsn: str, *, expected_tls: bool | None, expected_ca: str | None) -> None:
     """TLS query options and the mongodb+srv scheme map to config fields."""
     check = MongoHealthCheck.from_dsn(dsn)
     assert check._config.tls is expected_tls
@@ -468,7 +468,7 @@ def test_parse_dsn_tls(dsn: str, expected_tls: bool | None, expected_ca: str | N
 
 @pytest.mark.asyncio
 async def test_AsyncIOMotorClient_tls_kwargs() -> None:
-    """tls and tls_ca_file are forwarded to the Motor client when set."""
+    """Config tls and tls_ca_file are forwarded to the Motor client when set."""
     health_check = MongoHealthCheck(
         hosts="mongo.example",
         port=27017,

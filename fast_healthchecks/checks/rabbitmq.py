@@ -161,15 +161,27 @@ class RabbitMQHealthCheck(
         )
         return cls(config=config, name=name)
 
+    def _validate_cached_client(self, client: AbstractRobustConnection) -> bool:  # ruff: ignore[no-self-use] - lifecycle hook override
+        """Check that the cached connection is still open.
+
+        Returns:
+            bool: True when the connection is open; False discards it so
+            ``_ensure_client`` reconnects.
+        """
+        return not client.is_closed
+
     @healthcheck_safe(invalidate_on_error=True)
     async def __call__(self) -> HealthCheckResult:
         """Perform the health check on RabbitMQ.
 
-        ClientCachingMixin handles connection persistence; _ensure_client
-        validates the connection via aio-pika's robust logic.
+        A cached connection is reused only while it is open; each check then
+        opens and closes a channel so the broker actually answers — a robust
+        connection object alone does not prove broker liveness.
 
         Returns:
             HealthCheckResult: The result of the health check.
         """
-        _ = await self._ensure_client()
+        client = await self._ensure_client()
+        channel = await client.channel()
+        await channel.close()
         return HealthCheckResult(name=self._name, healthy=True)

@@ -426,6 +426,20 @@ async def test_call_failure_invalidates_client_then_succeeds() -> None:
 
 
 @pytest.mark.asyncio
+async def test_call_awaits_future_ping_result() -> None:
+    """A ping returning a Future (awaitable, not a coroutine) is awaited, not truth-tested."""
+    health_check = RedisHealthCheck(host="localhost", name="Redis")
+    future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+    future.set_result(False)
+    redis_mock = MagicMock(spec=Redis)
+    redis_mock.ping = MagicMock(return_value=future)
+    with patch("fast_healthchecks.checks.redis.Redis", return_value=redis_mock):
+        result = await health_check()
+    assert result.healthy is False
+    assert result.error is not None
+
+
+@pytest.mark.asyncio
 async def test_call_ping_false_returns_dependency_unhealthy() -> None:
     """False Redis ping is normalized to structured DEPENDENCY_UNHEALTHY error."""
     health_check = RedisHealthCheck(host="localhost", port=6379, name="Redis")

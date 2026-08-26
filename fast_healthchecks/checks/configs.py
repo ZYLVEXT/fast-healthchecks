@@ -153,7 +153,7 @@ class RabbitMQConfig:
             ValueError: If both ``user`` and ``password`` are ``"guest"`` and
                 ``host`` is not a loopback address.
         """
-        if self.user == "guest" and self.password == "guest" and self.host not in _LOOPBACK_HOSTS:
+        if self.user == "guest" and self.password == "guest" and self.host not in _LOOPBACK_HOSTS:  # ruff: ignore[hardcoded-password-string] - compares against the known RabbitMQ default
             msg = (
                 f"RabbitMQ default credentials 'guest'/'guest' are only valid for loopback hosts, "
                 f"got host {self.host!r}; set explicit credentials"

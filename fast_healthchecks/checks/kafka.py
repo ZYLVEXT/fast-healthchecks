@@ -190,6 +190,17 @@ class KafkaHealthCheck(
         )
         return cls(config=config, name=name)
 
+    async def _on_client_ready(self, client: AIOKafkaAdminClient) -> None:  # ruff: ignore[no-self-use] - lifecycle hook override
+        """Start the admin client once, inside the ensure-client lock.
+
+        Concurrent first calls are serialized by the lock, so ``start()``
+        cannot run twice for one client.
+        """
+        if not getattr(client, "_started", False):  # pragma: no branch
+            await client.start()
+            with contextlib.suppress(AttributeError):
+                client._started = True  # ruff: ignore[private-member-access] - the client library exposes no public equivalent
+
     @healthcheck_safe(invalidate_on_error=True)
     async def __call__(self) -> HealthCheckResult:
         """Perform the health check on Kafka.
@@ -198,9 +209,5 @@ class KafkaHealthCheck(
             HealthCheckResult: The result of the health check.
         """
         client = await self._ensure_client()
-        if not getattr(client, "_started", False):  # pragma: no branch
-            await client.start()
-            with contextlib.suppress(AttributeError):
-                client._started = True  # ruff: ignore[private-member-access] - the client library exposes no public equivalent
         await client.list_topics()
         return HealthCheckResult(name=self._name, healthy=True)

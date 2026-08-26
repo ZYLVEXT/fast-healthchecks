@@ -178,6 +178,11 @@ class ConfigDictMixin(ToDictMixin):
     _config: _ConfigWithToDict
     _name: str
 
+    @property
+    def name(self) -> str:
+        """Public check name used in results and reports."""
+        return self._name
+
     def _build_dict(self) -> dict[str, Any]:
         """Return the check attributes as a dictionary (without redaction)."""
         return {**self._config.to_dict(), "name": self._name}
@@ -214,6 +219,25 @@ class ClientCachingMixin(ABC, Generic[ClientT]):
         """Create and return a new client (or awaitable). Called when cache is empty or invalid."""
         ...  # pragma: no cover
 
+    async def _on_client_ready(self, client: ClientT) -> None:
+        """One-time initialization after client creation, under the ensure-client lock.
+
+        Override for clients that need an explicit start step (e.g. Kafka
+        ``start()``). Runs exactly once per created client; concurrent callers
+        are serialized by the lock. Default: no-op.
+        """
+
+    def _validate_cached_client(self, client: ClientT) -> bool:  # ruff: ignore[no-self-use, unused-method-argument] - overridable lifecycle hook
+        """Check whether a cached client is still usable, on every cache hit.
+
+        Runs under the ensure-client lock. Must be cheap and synchronous.
+
+        Returns:
+            bool: True to reuse the cached client; False to close and
+            recreate it (e.g. a connection reporting ``is_closed``).
+        """
+        return True
+
     async def aclose(self) -> None:
         """Close the cached client if present.
 
@@ -237,9 +261,10 @@ class ClientCachingMixin(ABC, Generic[ClientT]):
                 running = asyncio.get_running_loop()
             except RuntimeError:
                 running = None
-            if self._client is not None and self._client_loop is not running:
+            cached = self._client
+            if cached is not None and (self._client_loop is not running or not self._validate_cached_client(cached)):
                 with contextlib.suppress(Exception):
-                    await self._close_client_fn(self._client)
+                    await self._close_client_fn(cached)
                 self._client = None
                 self._client_loop = None
             if self._client is None:
@@ -249,10 +274,15 @@ class ClientCachingMixin(ABC, Generic[ClientT]):
                     self._client_loop = None
 
                 client_or_awaitable = self._create_client()
+                # Deliberately iscoroutine, not isawaitable: some client objects
+                # (e.g. redis.asyncio.Redis) are themselves awaitable and must
+                # be cached as-is, not awaited.
                 if asyncio.iscoroutine(client_or_awaitable):
-                    self._client = cast("ClientT", await client_or_awaitable)
+                    created = cast("ClientT", await client_or_awaitable)
                 else:
-                    self._client = cast("ClientT", client_or_awaitable)
+                    created = cast("ClientT", client_or_awaitable)
+                self._client = created
+                await self._on_client_ready(created)
 
             if self._client is None:  # pragma: no cover
                 msg = "Failed to create client"

@@ -176,3 +176,21 @@ async def test_async_function_returns_false() -> None:
     assert result.healthy is False
     assert result.error is not None
     assert result.error.code == DEPENDENCY_UNHEALTHY
+
+
+class _AsyncCallable:
+    """Callable instance whose __call__ is a coroutine function."""
+
+    async def __call__(self) -> bool:
+        await asyncio.sleep(0)
+        return False
+
+
+@pytest.mark.asyncio
+async def test_async_callable_instance_detected_as_async() -> None:
+    """An instance with async __call__ runs on the loop; its result is awaited, not discarded."""
+    check = FunctionHealthCheck(func=_AsyncCallable(), timeout=0.2)
+    result = await check()
+    assert result.healthy is False
+    assert result.error is not None
+    assert result.error.code == DEPENDENCY_UNHEALTHY

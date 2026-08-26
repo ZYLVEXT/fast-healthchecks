@@ -547,6 +547,19 @@ async def test__call_does_not_restart_started_client() -> None:
 
 
 @pytest.mark.asyncio
+async def test_concurrent_first_calls_start_client_once() -> None:
+    """Concurrent first checks serialize on the ensure-client lock; start() runs once."""
+    health_check = KafkaHealthCheck(bootstrap_servers="localhost:9092")
+    with (
+        patch.object(AIOKafkaAdminClient, "start", new_callable=AsyncMock) as mock_start,
+        patch.object(AIOKafkaAdminClient, "list_topics", new_callable=AsyncMock),
+    ):
+        results = await asyncio.gather(health_check(), health_check())
+        assert all(result.healthy for result in results)
+        assert mock_start.await_count == 1
+
+
+@pytest.mark.asyncio
 async def test__call_failure() -> None:
     """Check returns unhealthy when admin client fails."""
     health_check = KafkaHealthCheck(bootstrap_servers="localhost:9092")

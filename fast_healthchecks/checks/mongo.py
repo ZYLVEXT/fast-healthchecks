@@ -21,7 +21,7 @@ Example:
 
 from __future__ import annotations
 
-import asyncio
+import inspect
 from typing import TYPE_CHECKING, Any, final
 from urllib.parse import urlsplit
 
@@ -40,6 +40,7 @@ from fast_healthchecks.models import HealthCheckResult
 from fast_healthchecks.utils import parse_query_string
 
 if TYPE_CHECKING:
+    import asyncio
     from collections.abc import Awaitable, Callable
 
 try:
@@ -56,7 +57,7 @@ def _close_mongo_client(
     client: AsyncIOMotorClient[dict[str, Any]],
 ) -> Awaitable[None]:
     result = client.close()
-    if asyncio.iscoroutine(result):
+    if inspect.isawaitable(result):
         return result
 
     async def _noop() -> None:

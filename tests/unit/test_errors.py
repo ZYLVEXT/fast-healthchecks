@@ -17,10 +17,10 @@ def test_map_exception_to_health_error_unknown_exception_code() -> None:
 
 
 def test_message_has_no_traceback_even_when_traceback_present() -> None:
-    """A raised exception maps to '<Type>: <message>' without traceback frames."""
+    """A raised exception maps to '<Type>: <message>' without traceback frames."""  # ruff: ignore[docstring-missing-exception] - the raise never escapes the test
     try:
         msg = "boom"
-        raise RuntimeError(msg)  # noqa: TRY301
+        raise RuntimeError(msg)  # ruff: ignore[raise-within-try] - the raise builds a real traceback for the assertion
     except RuntimeError as exc:
         error = map_exception_to_health_error(exc)
     assert error.message == "RuntimeError: boom"
