@@ -66,5 +66,5 @@ For OpenTelemetry or other backends, create a span in `on_check_start` and end i
 Structured logging for probe and check execution is **optional** and **disabled by default**. No external logging framework is required.
 
 - **Abstraction:** Use `get_probe_logger()` / `set_probe_logger()` and `get_stdlib_probe_logger()` from `fast_healthchecks.logging`. The logger receives `log(level, msg, **extra)`; when using the stdlib adapter, `extra` is redacted (same keys as `utils.redact_secrets_in_dict`) so secrets never appear in log output.
-- **Events:** When enabled, `run_probe` logs `probe_start` (probe name, checks count), and after completion `probe_end` (probe name, healthy, results summary). Per-check `check_start` / `check_end` (check name, index, healthy) are logged at DEBUG.
+- **Events:** When enabled, `run_probe` logs `probe_start` (probe name, checks count), and after completion `probe_end` (probe name, healthy, results summary). Per-check `check_start` / `check_end` (check name, index, healthy, and the structured error message for failed checks) are logged at DEBUG.
 - **Enable:** Call `set_probe_logger(get_stdlib_probe_logger())` before running probes. Use `NullLogger()` or `set_probe_logger(NullLogger())` to disable (default).
