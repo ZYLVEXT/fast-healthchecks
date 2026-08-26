@@ -1,3 +1,28 @@
+## 1.2.0 (2026-08-27)
+
+### BREAKING CHANGE
+
+- **opensearch**: `from_dsn("https://...")` now verifies server certificates by default (`verify_certs=True`, also the new `OpenSearchConfig` default); pass `verify_certs=False` explicitly to opt out
+- **errors**: `HealthError.message` is always `"<ExceptionType>: <message>"`; tracebacks no longer appear in messages, responses, or debug payloads
+- **url**: `UrlHealthCheck` raises `ValueError` for `https` URLs combining basic-auth credentials with `verify_ssl=False`
+- **rabbitmq**: `RabbitMQConfig` raises `ValueError` when the default `guest`/`guest` credentials target a non-loopback host
+- **execution**: parallel probe runs are capped at 8 concurrent checks by default (`max_concurrency`); set `max_concurrency=None` to restore unbounded gathering
+
+### Security
+
+- **mongo**: honor `tls`/`ssl` and `tlsCAFile` DSN options (with `mongodb+srv` enabling TLS by default, matching PyMongo) and forward them to the Motor client
+- **redaction**: also redact `passwd`, `authorization`, `bearer`, `cookie`, and `private_key` key fragments
+- **docs**: document debug-mode exposure, DSN certificate-path trust, and the key-based limits of redaction
+
+### Fixes
+
+- **kafka**: start the admin client inside the ensure-client lock so concurrent first checks cannot double-start it
+- **rabbitmq**: discard cached connections reporting `is_closed` and open a channel per check so the broker actually answers
+- **function**: detect callable instances with `async def __call__` instead of sending them to the executor and reporting the unawaited coroutine as healthy
+- **redis**: await any awaitable `ping()` result, not only coroutines
+- **execution**: serialize `ProbeRunner.close()` and resource tracking behind an internal lock
+- **ci**: validate the environment-provided Compose image when the pin variable is exported, and catch unstable tag keywords (`latest`, `alpha`, `beta`, `nightly`, `preview`) anywhere in a tag
+
 ## 1.1.2 (2026-08-24)
 
 ### Fixes

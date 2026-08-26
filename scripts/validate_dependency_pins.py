@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -12,11 +13,13 @@ from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PINNED_ACTION = re.compile(r"(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)@[0-9a-f]{40}\Z")
 PINNED_IMAGE = re.compile(r"(?P<repository>[^@\s]+):(?P<tag>[^@\s]+)@sha256:[0-9a-f]{64}\Z")
-COMPOSE_DEFAULT = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*:-(?P<image>[^}]+)\}\Z")
+COMPOSE_DEFAULT = re.compile(r"\$\{(?P<variable>[A-Za-z_][A-Za-z0-9_]*):-(?P<image>[^}]+)\}\Z")
 EXACT_TAG = re.compile(r"v?\d+\.\d+\.\d+(?:-[A-Za-z0-9][A-Za-z0-9._-]*)?\Z")
 EXACT_POSTGRES_TAG = re.compile(r"\d+\.\d+-alpine\Z")
+# Long keywords are unstable anywhere in the tag; short tokens (rc, dev, edge)
+# require a delimiter or digits so words like "arch" or "bookworm" don't match.
 UNSTABLE_TAG = re.compile(
-    r"(?:^|[-.])(?:latest|alpha\d*|beta\d*|rc\d*|nightly|edge|dev\d*|preview\d*)(?:[-.]|$)",
+    r"latest|alpha|beta|nightly|preview|(?:^|[-.])(?:rc\d*|dev\d*|edge)(?:[-.]|$)",
     re.IGNORECASE,
 )
 
@@ -49,11 +52,16 @@ def _mapping_values(path: Path, key: str) -> list[tuple[int, str]]:
 def _image_reference(image: str) -> str:
     """Resolve a Compose environment-variable default to its image reference.
 
+    When the referenced environment variable is set, its value is what
+    Compose would run, so that value is validated instead of the default.
+
     Returns:
-        The direct or environment-default image reference.
+        The direct, environment-provided, or environment-default image reference.
     """
     compose_default = COMPOSE_DEFAULT.fullmatch(image)
-    return compose_default.group("image") if compose_default is not None else image
+    if compose_default is None:
+        return image
+    return os.environ.get(compose_default.group("variable")) or compose_default.group("image")
 
 
 def _is_pinned_image(image: str) -> bool:

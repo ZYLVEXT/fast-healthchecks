@@ -1,4 +1,9 @@
-"""Example app for fast-healthchecks."""
+"""Example app for fast-healthchecks.
+
+Probe routes keep the default ``debug=False``: debug responses dump every
+check's error message and belong only on endpoints that are not reachable
+from outside the deployment.
+"""
 
 from __future__ import annotations
 
@@ -34,7 +39,7 @@ router_integration = HealthcheckRouter(
         name="startup",
         checks=get_startup_checks(),
     ),
-    options=build_probe_route_options(debug=True, prefix="/health"),
+    options=build_probe_route_options(debug=False, prefix="/health"),
 )
 
 
@@ -63,7 +68,7 @@ router_success = HealthcheckRouter(
         name="startup",
         checks=[],
     ),
-    options=build_probe_route_options(debug=True, prefix="/health"),
+    options=build_probe_route_options(debug=False, prefix="/health"),
 )
 
 
@@ -92,7 +97,7 @@ router_fail = HealthcheckRouter(
         name="startup",
         checks=[],
     ),
-    options=build_probe_route_options(debug=True, prefix="/health"),
+    options=build_probe_route_options(debug=False, prefix="/health"),
 )
 
 
@@ -129,7 +134,7 @@ router_custom = HealthcheckRouter(
         failure_handler=custom_handler,
         success_status=status.HTTP_200_OK,
         failure_status=status.HTTP_503_SERVICE_UNAVAILABLE,
-        debug=True,
+        debug=True,  # demo of debug payloads; keep False on publicly reachable endpoints
         prefix="/custom_health",
     ),
 )
