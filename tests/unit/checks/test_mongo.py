@@ -461,9 +461,9 @@ async def test_AsyncIOMotorClient_args_kwargs() -> None:
 )
 def test_parse_dsn_tls(dsn: str, *, expected_tls: bool | None, expected_ca: str | None) -> None:
     """TLS query options and the mongodb+srv scheme map to config fields."""
-    check = MongoHealthCheck.from_dsn(dsn)
-    assert check._config.tls is expected_tls
-    assert check._config.tls_ca_file == expected_ca
+    config = MongoHealthCheck.from_dsn(dsn).to_dict()
+    assert config["tls"] is expected_tls
+    assert config["tls_ca_file"] == expected_ca
 
 
 @pytest.mark.asyncio
