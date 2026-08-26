@@ -18,7 +18,7 @@ async def main():
 asyncio.run(main())
 ```
 
-Optional parameters: `timeout` (seconds), `on_check_start`, `on_check_end` (callbacks).
+Optional parameters: `timeout` (seconds), `max_concurrency` (parallel-mode cap on simultaneously running checks, default 8, `None` = unlimited), `on_check_start`, `on_check_end` (callbacks).
 
 ## Hooks for metrics and tracing
 

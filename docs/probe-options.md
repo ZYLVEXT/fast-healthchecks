@@ -35,6 +35,7 @@ When using [`ProbeRunner`][ProbeRunner] directly, you can customize execution be
 | `execution` | Controls check execution within one probe: `"parallel"` or `"sequential"`. Default: `"parallel"`. |
 | `probe_timeout_ms` | Timeout in milliseconds for one `runner.run(probe)` call. Default: `None`. |
 | `health_evaluation` | Controls evaluation strategy: `"all_required"` (all probes must pass) or `"partial_allowed"` (some probes can fail without failing overall). Default: `"all_required"`. |
+| `max_concurrency` | Caps how many checks run at once in parallel mode. `None` removes the cap. Default: `8`. |
 
 Example:
 

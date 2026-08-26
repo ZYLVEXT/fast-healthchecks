@@ -33,6 +33,8 @@ _VALID_RUN_MODES: frozenset[str] = frozenset({"strict", "reporting"})
 _VALID_EXECUTION_MODES: frozenset[str] = frozenset({"parallel", "sequential"})
 _VALID_HEALTH_EVALUATIONS: frozenset[str] = frozenset({"all_required", "partial_allowed"})
 
+DEFAULT_MAX_CONCURRENCY: int = 8
+
 
 class Probe(NamedTuple):
     """A named sequence of health checks executed as one probe."""
@@ -118,12 +120,24 @@ def _timeout_results(probe: Probe) -> list[HealthCheckResult]:
     ]
 
 
-async def _run_parallel(probe: Probe) -> list[HealthCheckResult]:
+async def _run_parallel(probe: Probe, *, max_concurrency: int | None = None) -> list[HealthCheckResult]:
     if len(probe.checks) == 1:
         return [await _run_check_safe(probe.checks[0], 0)]
+    if max_concurrency is None:
+        return list(
+            await asyncio.gather(
+                *(_run_check_safe(check, index) for index, check in enumerate(probe.checks)),
+            ),
+        )
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def run_limited(check: Check, index: int) -> HealthCheckResult:
+        async with semaphore:
+            return await _run_check_safe(check, index)
+
     return list(
         await asyncio.gather(
-            *(_run_check_safe(check, index) for index, check in enumerate(probe.checks)),
+            *(run_limited(check, index) for index, check in enumerate(probe.checks)),
         ),
     )
 
@@ -150,11 +164,15 @@ async def run_probe(  # ruff: ignore[too-many-arguments] - explicit options; bun
     *,
     timeout: float | None = None,
     execution: ExecutionMode = "parallel",
+    max_concurrency: int | None = DEFAULT_MAX_CONCURRENCY,
     on_check_start: OnCheckStart | None = None,
     on_check_end: OnCheckEnd | None = None,
     on_timeout_return_failure: bool = False,
 ) -> HealthCheckReport:
     """Run a probe without importing an HTTP or framework integration.
+
+    ``max_concurrency`` caps how many checks run at once in parallel mode
+    (default 8); ``None`` removes the cap. Sequential mode ignores it.
 
     Returns:
         A report containing results in input order.
@@ -171,7 +189,7 @@ async def run_probe(  # ruff: ignore[too-many-arguments] - explicit options; bun
     execution_awaitable = (
         _run_sequential(probe, on_check_start=on_check_start, on_check_end=on_check_end)
         if sequential
-        else _run_parallel(probe)
+        else _run_parallel(probe, max_concurrency=max_concurrency)
     )
     try:
         results = (
@@ -221,18 +239,24 @@ async def close_probes(probes: Iterable[Probe]) -> None:
 
 @dataclass(frozen=True)
 class RunPolicy:
-    """Immutable policy controlling probe execution behavior."""
+    """Immutable policy controlling probe execution behavior.
+
+    ``max_concurrency`` caps how many checks run at once in parallel mode
+    (default 8); ``None`` removes the cap.
+    """
 
     mode: RunMode = "strict"
     execution: ExecutionMode = "parallel"
     probe_timeout_ms: int | None = None
     health_evaluation: HealthEvaluationMode = "all_required"
+    max_concurrency: int | None = DEFAULT_MAX_CONCURRENCY
 
     def __post_init__(self) -> None:
         """Validate policy values.
 
         Raises:
-            ValueError: If a mode is unknown or the timeout is not positive.
+            ValueError: If a mode is unknown, the timeout is not positive, or
+                max_concurrency is not positive.
         """
         if self.mode not in _VALID_RUN_MODES:
             msg = f"Invalid run mode: {self.mode}"
@@ -246,15 +270,25 @@ class RunPolicy:
         if self.probe_timeout_ms is not None and self.probe_timeout_ms <= 0:
             msg = "probe_timeout_ms must be > 0 when provided"
             raise ValueError(msg)
+        if self.max_concurrency is not None and self.max_concurrency <= 0:
+            msg = "max_concurrency must be > 0 when provided"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True)
 class ProbeRunner:
-    """Execute probes and close only resource-owning checks seen by the runner."""
+    """Execute probes and close only resource-owning checks seen by the runner.
+
+    The runner owns the lifecycle of resource checks it has seen: ``close()``
+    and resource tracking are serialized by an internal lock so a concurrent
+    ``close()`` cannot race registration. Probe execution itself is not
+    locked; concurrent ``run()`` calls proceed in parallel.
+    """
 
     policy: RunPolicy = field(default_factory=RunPolicy)
     _resource_checks: list[object] = field(default_factory=list, init=False, repr=False, compare=False)
     _resource_check_ids: set[int] = field(default_factory=set, init=False, repr=False, compare=False)
+    _resources_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False, compare=False)
 
     async def __aenter__(self) -> ProbeRunner:  # ruff: ignore[non-self-return-type] - returns the concrete subclass by design
         """Return self for async context-manager usage."""
@@ -283,12 +317,14 @@ class ProbeRunner:
         Returns:
             The evaluated health-check report.
         """
-        self._track_resources(probe)
+        async with self._resources_lock:
+            self._track_resources(probe)
         timeout = None if self.policy.probe_timeout_ms is None else self.policy.probe_timeout_ms / 1000
         report = await run_probe(
             probe,
             timeout=timeout,
             execution=self.policy.execution,
+            max_concurrency=self.policy.max_concurrency,
             on_timeout_return_failure=self.policy.mode == "reporting",
         )
         if self.policy.health_evaluation == "partial_allowed":
@@ -297,13 +333,15 @@ class ProbeRunner:
 
     async def close(self) -> None:
         """Close resource-owning checks observed by this runner."""
-        if await _close_checks(self._resource_checks):
-            await asyncio.sleep(0.1)
-        self._resource_checks.clear()
-        self._resource_check_ids.clear()
+        async with self._resources_lock:
+            if await _close_checks(self._resource_checks):
+                await asyncio.sleep(0.1)
+            self._resource_checks.clear()
+            self._resource_check_ids.clear()
 
 
 __all__ = (
+    "DEFAULT_MAX_CONCURRENCY",
     "ExecutionMode",
     "HealthEvaluationMode",
     "Probe",
