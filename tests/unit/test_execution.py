@@ -10,11 +10,13 @@ import pytest
 from fast_healthchecks.checks.function import FunctionHealthCheck
 from fast_healthchecks.errors import PROBE_TIMEOUT
 from fast_healthchecks.execution import (
+    DEFAULT_MAX_CONCURRENCY,
     ExecutionMode,
     HealthEvaluationMode,
     ProbeRunner,
     RunMode,
     RunPolicy,
+    run_probe,
 )
 from fast_healthchecks.integrations.base import Probe
 from fast_healthchecks.models import HealthCheckReport, HealthCheckTimeoutError
@@ -23,6 +25,8 @@ from tests.unit.integrations.helpers import CheckWithAclose
 pytestmark = pytest.mark.unit
 
 MIN_PARALLEL_CONCURRENCY = 2
+CONCURRENCY_CAP = 2
+UNCAPPED_CHECKS = 5
 
 
 def test_run_policy_defaults() -> None:
@@ -32,6 +36,7 @@ def test_run_policy_defaults() -> None:
     assert policy.execution == "parallel"
     assert policy.probe_timeout_ms is None
     assert policy.health_evaluation == "all_required"
+    assert policy.max_concurrency == DEFAULT_MAX_CONCURRENCY
 
 
 def test_run_policy_is_immutable() -> None:
@@ -58,6 +63,8 @@ def test_run_policy_is_immutable() -> None:
         ),
         (lambda: RunPolicy(probe_timeout_ms=0), "probe_timeout_ms must be > 0 when provided"),
         (lambda: RunPolicy(probe_timeout_ms=-1), "probe_timeout_ms must be > 0 when provided"),
+        (lambda: RunPolicy(max_concurrency=0), "max_concurrency must be > 0 when provided"),
+        (lambda: RunPolicy(max_concurrency=-1), "max_concurrency must be > 0 when provided"),
     ],
 )
 def test_run_policy_validation(factory: Callable[[], RunPolicy], expected_message: str) -> None:
@@ -102,6 +109,66 @@ async def test_probe_runner_run_returns_health_check_report() -> None:
     assert isinstance(report, HealthCheckReport)
     assert [result.name for result in report.results] == ["Slow", "Fast"]
     assert max_running >= MIN_PARALLEL_CONCURRENCY
+
+
+class _ConcurrencyTracker:
+    """Track how many checks overlap while running."""
+
+    def __init__(self) -> None:
+        self.running = 0
+        self.peak = 0
+
+    async def check(self) -> bool:
+        """Record overlap and idle briefly so siblings can start.
+
+        Returns:
+            bool: Always True.
+        """
+        self.running += 1
+        self.peak = max(self.peak, self.running)
+        await asyncio.sleep(0.01)
+        self.running -= 1
+        return True
+
+
+@pytest.mark.asyncio
+async def test_parallel_respects_max_concurrency() -> None:
+    """Parallel execution never overlaps more checks than max_concurrency."""
+    tracker = _ConcurrencyTracker()
+    probe = Probe(
+        name="ready",
+        checks=[FunctionHealthCheck(func=tracker.check, name=f"C{i}") for i in range(UNCAPPED_CHECKS)],
+    )
+    report = await run_probe(probe, max_concurrency=CONCURRENCY_CAP)
+    assert report.healthy is True
+    assert tracker.peak <= CONCURRENCY_CAP
+
+
+@pytest.mark.asyncio
+async def test_parallel_uncapped_when_max_concurrency_none() -> None:
+    """max_concurrency=None removes the cap; all checks overlap."""
+    tracker = _ConcurrencyTracker()
+    probe = Probe(
+        name="ready",
+        checks=[FunctionHealthCheck(func=tracker.check, name=f"C{i}") for i in range(UNCAPPED_CHECKS)],
+    )
+    report = await run_probe(probe, max_concurrency=None)
+    assert report.healthy is True
+    assert tracker.peak == UNCAPPED_CHECKS
+
+
+@pytest.mark.asyncio
+async def test_runner_applies_policy_max_concurrency() -> None:
+    """ProbeRunner passes policy.max_concurrency to probe execution."""
+    tracker = _ConcurrencyTracker()
+    probe = Probe(
+        name="ready",
+        checks=[FunctionHealthCheck(func=tracker.check, name=f"C{i}") for i in range(UNCAPPED_CHECKS)],
+    )
+    runner = ProbeRunner(policy=RunPolicy(max_concurrency=CONCURRENCY_CAP))
+    report = await runner.run(probe)
+    assert report.healthy is True
+    assert tracker.peak <= CONCURRENCY_CAP
 
 
 @pytest.mark.asyncio

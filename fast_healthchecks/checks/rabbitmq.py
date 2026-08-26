@@ -3,10 +3,11 @@
 Classes:
     RabbitMQHealthCheck: A class to perform health checks on RabbitMQ.
 
-**Security:** When using DSN or config without a password (or with default
-credentials), the library falls back to ``user="guest"`` and ``password="guest"``.
-These defaults are for local development only; do not use them in production or
-on non-local brokers. See SECURITY.md and :class:`RabbitMQConfig` docstring.
+**Security:** When using DSN or config without credentials, the library falls
+back to ``user="guest"`` and ``password="guest"``. This fallback is accepted
+only for loopback hosts; ``RabbitMQConfig`` raises ``ValueError`` when the
+default credentials target any other host. See SECURITY.md and
+:class:`RabbitMQConfig` docstring.
 
 Usage:
     The RabbitMQHealthCheck class can be used to perform health checks on RabbitMQ by calling it.
@@ -148,7 +149,7 @@ class RabbitMQHealthCheck(
         **_kwargs: object,
     ) -> RabbitMQHealthCheck:
         parse_result = parsed["parse_result"]
-        # Default "guest"/"guest" is development-only; see SECURITY.md and RabbitMQConfig.
+        # Default "guest"/"guest" is loopback-only; RabbitMQConfig rejects it for remote hosts.
         config = RabbitMQConfig(
             host=parse_result.hostname or "localhost",
             user=parse_result.username or "guest",
@@ -160,15 +161,27 @@ class RabbitMQHealthCheck(
         )
         return cls(config=config, name=name)
 
+    def _validate_cached_client(self, client: AbstractRobustConnection) -> bool:  # ruff: ignore[no-self-use] - lifecycle hook override
+        """Check that the cached connection is still open.
+
+        Returns:
+            bool: True when the connection is open; False discards it so
+            ``_ensure_client`` reconnects.
+        """
+        return not client.is_closed
+
     @healthcheck_safe(invalidate_on_error=True)
     async def __call__(self) -> HealthCheckResult:
         """Perform the health check on RabbitMQ.
 
-        ClientCachingMixin handles connection persistence; _ensure_client
-        validates the connection via aio-pika's robust logic.
+        A cached connection is reused only while it is open; each check then
+        opens and closes a channel so the broker actually answers — a robust
+        connection object alone does not prove broker liveness.
 
         Returns:
             HealthCheckResult: The result of the health check.
         """
-        _ = await self._ensure_client()
+        client = await self._ensure_client()
+        channel = await client.channel()
+        await channel.close()
         return HealthCheckResult(name=self._name, healthy=True)

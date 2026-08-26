@@ -71,6 +71,9 @@ jobs:
             echo "No protected release-operations run proves this exact commit." >&2
             exit 1
           fi
+          # The run is bound to this exact commit and tag below (head_sha, head_branch,
+          # workflow_id, success); any successful run proving this SHA is acceptable,
+          # so no "latest run" requirement — that would only add flake sensitivity.
           tests_workflow_id=$(gh api "repos/$GH_REPO/actions/workflows/1_test.yml" --jq .id)
           test_run=$(gh api "repos/$GH_REPO/actions/runs/$TESTS_RUN_ID")
           if ! jq -e --arg sha "$RELEASE_SHA" --arg tag "$TAG" --argjson workflow_id "$tests_workflow_id" \

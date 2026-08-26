@@ -46,10 +46,17 @@ def test_typed_dict_structures() -> None:
     mongo: MongoParseDsnResult = {
         "parse_result": urlsplit("mongodb://localhost"),
         "authSource": "admin",
+        "tls": None,
+        "tls_ca_file": None,
     }
     assert mongo["authSource"] == "admin"
 
-    opensearch: OpenSearchParseDsnResult = {"hosts": ["localhost:9200"], "http_auth": None, "use_ssl": False}
+    opensearch: OpenSearchParseDsnResult = {
+        "hosts": ["localhost:9200"],
+        "http_auth": None,
+        "use_ssl": False,
+        "verify_certs": False,
+    }
     assert opensearch["hosts"] == ["localhost:9200"]
 
     rabbitmq: RabbitMQParseDsnResult = {"parse_result": urlsplit("amqp://localhost")}

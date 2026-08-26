@@ -17,7 +17,7 @@ Example:
 
 from __future__ import annotations
 
-import asyncio
+import inspect
 from typing import TYPE_CHECKING, Any, final
 from urllib.parse import urlsplit
 
@@ -40,6 +40,7 @@ except ImportError as exc:
     raise_optional_import_error("redis", "redis", exc)
 
 if TYPE_CHECKING:
+    import asyncio
     from collections.abc import Awaitable, Callable
 
     from redis.asyncio.connection import ConnectKwargs
@@ -173,7 +174,7 @@ class RedisHealthCheck(ClientCachingMixin["Redis"], HealthCheckDSN[HealthCheckRe
         """
         redis = await self._ensure_client()
         ping_result = redis.ping()
-        healthy = bool(await ping_result) if asyncio.iscoroutine(ping_result) else bool(ping_result)
+        healthy = bool(await ping_result) if inspect.isawaitable(ping_result) else bool(ping_result)
         if healthy:
             return HealthCheckResult(name=self._name, healthy=True)
         return result_unhealthy_dependency(name=self._name, message="Redis ping returned unhealthy status")

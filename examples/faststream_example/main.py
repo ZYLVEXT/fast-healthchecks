@@ -96,7 +96,7 @@ app_custom = AsgiFastStream(
                 failure_handler=custom_handler,
                 success_status=HTTPStatus.OK,
                 failure_status=HTTPStatus.SERVICE_UNAVAILABLE,
-                debug=True,
+                debug=True,  # demo of debug payloads; keep False on publicly reachable endpoints
                 prefix="/custom_health",
             ),
         ),

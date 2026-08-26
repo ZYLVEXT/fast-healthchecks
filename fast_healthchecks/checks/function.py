@@ -29,9 +29,17 @@ if TYPE_CHECKING:
 class FunctionHealthCheck(ConfigDictMixin, HealthCheck[HealthCheckResult]):
     """Health check that runs a callable (sync or async) each time it is executed.
 
+    Async callables are detected via ``inspect.iscoroutinefunction`` on the
+    callable itself and on its ``__call__`` method, so instances of classes
+    with ``async def __call__`` run on the event loop. Exotic wrappers that
+    hide the coroutine function may still be misdetected as sync.
+
     Synchronous functions are run via ``loop.run_in_executor(executor, ...)``.
     The default executor is ``None`` (shared thread pool). Long-running blocking
-    sync checks can exhaust the pool; pass a dedicated :class:`Executor` if needed.
+    sync checks can exhaust the pool; pass a dedicated :class:`Executor` if
+    needed. A timeout abandons the worker thread rather than cancelling it —
+    Python offers no way to kill a running thread — so the blocking call may
+    keep running in the background after the check fails.
     """
 
     __slots__ = ("_config", "_executor", "_func", "_name")
@@ -91,7 +99,10 @@ class FunctionHealthCheck(ConfigDictMixin, HealthCheck[HealthCheckResult]):
         args = c.args or ()
         kwargs = dict(c.kwargs) if c.kwargs else {}
         task: asyncio.Future[Any]
-        if inspect.iscoroutinefunction(self._func):
+        is_async = inspect.iscoroutinefunction(self._func) or inspect.iscoroutinefunction(
+            getattr(self._func, "__call__", None),  # ruff: ignore[unreliable-callable-check] - detects async __call__ on callable instances
+        )
+        if is_async:
             task = self._func(*args, **kwargs)
         else:
             loop = asyncio.get_running_loop()

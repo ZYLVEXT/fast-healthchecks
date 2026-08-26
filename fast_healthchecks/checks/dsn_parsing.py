@@ -53,6 +53,8 @@ class MongoParseDsnResult(TypedDict, total=True):
 
     parse_result: ParsedUrl
     authSource: str
+    tls: bool | None
+    tls_ca_file: str | None
 
 
 class OpenSearchParseDsnResult(TypedDict, total=True):
@@ -61,6 +63,7 @@ class OpenSearchParseDsnResult(TypedDict, total=True):
     hosts: list[str]
     http_auth: tuple[str, str] | None
     use_ssl: bool
+    verify_certs: bool
 
 
 class RabbitMQParseDsnResult(TypedDict, total=True):

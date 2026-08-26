@@ -21,7 +21,7 @@ Example:
 
 from __future__ import annotations
 
-import asyncio
+import inspect
 from typing import TYPE_CHECKING, Any, final
 from urllib.parse import urlsplit
 
@@ -40,6 +40,7 @@ from fast_healthchecks.models import HealthCheckResult
 from fast_healthchecks.utils import parse_query_string
 
 if TYPE_CHECKING:
+    import asyncio
     from collections.abc import Awaitable, Callable
 
 try:
@@ -48,11 +49,15 @@ except ImportError as exc:
     raise_optional_import_error("motor", "motor", exc)
 
 
+_TLS_TRUE_VALUES: frozenset[str] = frozenset({"1", "true", "yes", "on"})
+_TLS_FALSE_VALUES: frozenset[str] = frozenset({"0", "false", "no", "off"})
+
+
 def _close_mongo_client(
     client: AsyncIOMotorClient[dict[str, Any]],
 ) -> Awaitable[None]:
     result = client.close()
-    if asyncio.iscoroutine(result):
+    if inspect.isawaitable(result):
         return result
 
     async def _noop() -> None:
@@ -113,6 +118,11 @@ class MongoHealthCheck(
 
     def _create_client(self) -> AsyncIOMotorClient[dict[str, Any]]:
         c = self._config
+        tls_kwargs: dict[str, Any] = {}
+        if c.tls is not None:
+            tls_kwargs["tls"] = c.tls
+        if c.tls_ca_file is not None:
+            tls_kwargs["tlsCAFile"] = c.tls_ca_file
         return AsyncIOMotorClient(
             host=c.hosts,
             port=c.port,
@@ -120,6 +130,7 @@ class MongoHealthCheck(
             password=c.password,
             authSource=c.auth_source,
             serverSelectionTimeoutMS=int(c.timeout * 1000),
+            **tls_kwargs,
         )
 
     @classmethod
@@ -134,6 +145,11 @@ class MongoHealthCheck(
     def parse_dsn(cls, dsn: str) -> MongoParseDsnResult:
         """Parse the DSN and return the results.
 
+        TLS follows the driver semantics: an explicit ``tls``/``ssl`` query
+        option wins; without one, ``mongodb+srv`` enables TLS (as PyMongo
+        does) and plain ``mongodb`` leaves the driver default (``tls=None``).
+        ``tlsCAFile`` (or legacy ``ssl_ca_certs``) sets the CA bundle.
+
         Args:
             dsn: The DSN to parse.
 
@@ -142,7 +158,21 @@ class MongoHealthCheck(
         """
         parse_result = urlsplit(dsn)
         query = parse_query_string(parse_result.query)
-        return {"parse_result": parse_result, "authSource": query.get("authSource", "admin")}
+        tls_raw = (query.get("tls") or query.get("ssl") or "").lower()
+        tls: bool | None
+        if tls_raw in _TLS_TRUE_VALUES:
+            tls = True
+        elif tls_raw in _TLS_FALSE_VALUES:
+            tls = False
+        else:
+            tls = True if parse_result.scheme == "mongodb+srv" else None
+        tls_ca_file = query.get("tlsCAFile") or query.get("ssl_ca_certs") or None
+        return {
+            "parse_result": parse_result,
+            "authSource": query.get("authSource", "admin"),
+            "tls": tls,
+            "tls_ca_file": tls_ca_file,
+        }
 
     @classmethod
     def _from_parsed_dsn(
@@ -169,6 +199,8 @@ class MongoHealthCheck(
             password=parse_result.password,
             database=parse_result.path.lstrip("/") or None,
             auth_source=parsed["authSource"],
+            tls=parsed["tls"],
+            tls_ca_file=parsed["tls_ca_file"],
             timeout=timeout,
         )
         return cls(config=config, name=name)

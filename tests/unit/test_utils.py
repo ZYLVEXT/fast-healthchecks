@@ -28,6 +28,11 @@ def test_redact_secrets_in_dict() -> None:
         "ClientSecretValue": "client-secret",
         "API_KEY_ID": "api-key",
         "serviceCredential": "credential",
+        "Authorization": "Basic abc",
+        "bearer_value": "jwt",
+        "session_cookie": "sid",
+        "tls_private_key": "pem",
+        "os_passwd": "hash",
         "meta": {
             "token": "abc",
             "nested": {"password": "nested-secret"},
@@ -36,6 +41,11 @@ def test_redact_secrets_in_dict() -> None:
     }
     result = redact_secrets_in_dict(data)
     assert result["host"] == "x"
+    assert result["Authorization"] == "***"
+    assert result["bearer_value"] == "***"
+    assert result["session_cookie"] == "***"
+    assert result["tls_private_key"] == "***"
+    assert result["os_passwd"] == "***"
     assert result["user"] == "***"
     assert result["username"] == "***"
     assert result["password"] == "***"

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from traceback import format_exception
 from typing import Final, Literal
 
 from fast_healthchecks.models import HealthError
@@ -39,12 +38,13 @@ __all__ = (
 def _format_exception_message(exc: BaseException) -> str:
     """Format an exception into a readable error message.
 
+    Tracebacks never enter ``HealthError.message``: the message may reach
+    HTTP responses and logs, so it carries only the exception type and text.
+    Use probe logging for deeper diagnostics.
+
     Returns:
-        A traceback-like message when traceback is available, otherwise
         ``"<ExceptionType>: <message>"``.
     """
-    if exc.__traceback__ is not None:
-        return "".join(format_exception(type(exc), exc, exc.__traceback__))
     return f"{type(exc).__name__}: {exc}"
 
 

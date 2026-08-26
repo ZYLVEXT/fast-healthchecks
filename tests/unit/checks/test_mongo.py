@@ -28,6 +28,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": None,
                 "database": None,
                 "auth_source": "admin",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -44,6 +46,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": None,
                 "database": None,
                 "auth_source": "admin",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -61,6 +65,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": None,
                 "database": None,
                 "auth_source": "admin",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -79,6 +85,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": None,
                 "database": None,
                 "auth_source": "admin",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -98,6 +106,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": "pass",
                 "database": None,
                 "auth_source": "admin",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -118,6 +128,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": "pass",
                 "database": "test",
                 "auth_source": "admin",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -131,6 +143,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": "pass",
                 "database": "test",
                 "auth_source": "admin2",
+                "tls": None,
+                "tls_ca_file": None,
             },
             {
                 "hosts": "localhost2",
@@ -139,6 +153,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": "pass",
                 "database": "test",
                 "auth_source": "admin2",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -152,6 +168,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": "pass",
                 "database": "test",
                 "auth_source": "admin2",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 10.0,
             },
             {
@@ -161,6 +179,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": "pass",
                 "database": "test",
                 "auth_source": "admin2",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 10.0,
                 "name": "MongoDB",
             },
@@ -174,6 +194,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": "pass",
                 "database": "test",
                 "auth_source": "admin2",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 10.0,
                 "name": "test",
             },
@@ -184,6 +206,8 @@ EXPECTED_CLIENT_CREATIONS_AFTER_RECREATE = 2
                 "password": "pass",
                 "database": "test",
                 "auth_source": "admin2",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 10.0,
                 "name": "test",
             },
@@ -215,6 +239,8 @@ def test_init(params: dict[str, Any], expected: dict[str, Any], exception: type[
                 "password": None,
                 "database": None,
                 "auth_source": "admin",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -230,6 +256,8 @@ def test_init(params: dict[str, Any], expected: dict[str, Any], exception: type[
                 "password": None,
                 "database": "test",
                 "auth_source": "admin",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -245,6 +273,8 @@ def test_init(params: dict[str, Any], expected: dict[str, Any], exception: type[
                 "password": "pass",
                 "database": "test",
                 "auth_source": "admin",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -260,6 +290,8 @@ def test_init(params: dict[str, Any], expected: dict[str, Any], exception: type[
                 "password": "pass",
                 "database": "test",
                 "auth_source": "admin2",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -278,6 +310,8 @@ def test_init(params: dict[str, Any], expected: dict[str, Any], exception: type[
                 "password": "pass",
                 "database": "test",
                 "auth_source": "admin2",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 10.0,
                 "name": "Test",
             },
@@ -296,6 +330,8 @@ def test_init(params: dict[str, Any], expected: dict[str, Any], exception: type[
                 "password": "pass",
                 "database": "test",
                 "auth_source": "admin2",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 10.0,
                 "name": "Test",
             },
@@ -311,6 +347,8 @@ def test_init(params: dict[str, Any], expected: dict[str, Any], exception: type[
                 "password": None,
                 "database": None,
                 "auth_source": "admin",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -326,6 +364,8 @@ def test_init(params: dict[str, Any], expected: dict[str, Any], exception: type[
                 "password": "pass",
                 "database": None,
                 "auth_source": "admin",
+                "tls": None,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -341,6 +381,8 @@ def test_init(params: dict[str, Any], expected: dict[str, Any], exception: type[
                 "password": None,
                 "database": "mydb",
                 "auth_source": "admin",
+                "tls": True,
+                "tls_ca_file": None,
                 "timeout": 5.0,
                 "name": "MongoDB",
             },
@@ -401,6 +443,49 @@ async def test_AsyncIOMotorClient_args_kwargs() -> None:
             password="password",
             authSource="admin2",
             serverSelectionTimeoutMS=1500,
+        )
+
+
+@pytest.mark.parametrize(
+    ("dsn", "expected_tls", "expected_ca"),
+    [
+        ("mongodb://localhost:27017/", None, None),
+        ("mongodb://localhost:27017/?tls=true", True, None),
+        ("mongodb://localhost:27017/?ssl=true", True, None),
+        ("mongodb://localhost:27017/?tls=false", False, None),
+        ("mongodb+srv://cluster.mongodb.net/db", True, None),
+        ("mongodb+srv://cluster.mongodb.net/db?tls=false", False, None),
+        ("mongodb://localhost:27017/?tls=true&tlsCAFile=/etc/ssl/ca.pem", True, "/etc/ssl/ca.pem"),
+        ("mongodb://localhost:27017/?ssl=true&ssl_ca_certs=/etc/ssl/ca.pem", True, "/etc/ssl/ca.pem"),
+    ],
+)
+def test_parse_dsn_tls(dsn: str, *, expected_tls: bool | None, expected_ca: str | None) -> None:
+    """TLS query options and the mongodb+srv scheme map to config fields."""
+    config = MongoHealthCheck.from_dsn(dsn).to_dict()
+    assert config["tls"] is expected_tls
+    assert config["tls_ca_file"] == expected_ca
+
+
+@pytest.mark.asyncio
+async def test_AsyncIOMotorClient_tls_kwargs() -> None:
+    """Config tls and tls_ca_file are forwarded to the Motor client when set."""
+    health_check = MongoHealthCheck(
+        hosts="mongo.example",
+        port=27017,
+        tls=True,
+        tls_ca_file="/etc/ssl/ca.pem",
+    )
+    with patch("fast_healthchecks.checks.mongo.AsyncIOMotorClient", spec=AsyncIOMotorClient) as mock:
+        await health_check()
+        mock.assert_called_once_with(
+            host="mongo.example",
+            port=27017,
+            username=None,
+            password=None,
+            authSource="admin",
+            serverSelectionTimeoutMS=5000,
+            tls=True,
+            tlsCAFile="/etc/ssl/ca.pem",
         )
 
 
